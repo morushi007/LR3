@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 13:09:05 2025
+Created on Tue May 13 13:15:28 2025
 
 @author: LENOVO
 """
@@ -193,7 +193,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             impacts = coeffs * feature_values
             
             # Create the SHAP-style force plot
-            fig, ax = plt.subplots(figsize=(12, 3))
+            fig, ax = plt.subplots(figsize=(14, 5))
             
             # Base value and prediction
             base_value = 0.5  # For logistic regression, base value is typically 0.5
@@ -206,7 +206,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             # Set up plot parameters
             ax.set_xlim(xlim_min, xlim_max)
-            ax.set_ylim(-0.7, 0.7)  # Give room for labels below
+            ax.set_ylim(-1.2, 0.7)  # Increased bottom margin for labels
             
             # Draw horizontal line for x-axis
             ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1)
@@ -216,19 +216,23 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.set_xticks(x_ticks)
             ax.set_xticklabels([str(x) for x in x_ticks], fontsize=8)
             
-            # Sort features by impact
+            # Sort features by impact for visualization
             feature_impacts = list(zip(feature_names, impacts, feature_values))
             
-            # Create separate lists for negative and positive impacts
+            # First get sorted negative impacts (pushing prediction lower)
             neg_features = [(f, i, v) for f, i, v in feature_impacts if i < 0]
+            neg_features = sorted(neg_features, key=lambda x: x[1])  # Sort from most negative to least negative
+            
+            # Then get sorted positive impacts (pushing prediction higher)
             pos_features = [(f, i, v) for f, i, v in feature_impacts if i > 0]
+            pos_features = sorted(pos_features, key=lambda x: x[1], reverse=True)  # Sort from most positive to least positive
             
-            # Sort by absolute impact
-            neg_features = sorted(neg_features, key=lambda x: abs(x[1]), reverse=True)
-            pos_features = sorted(pos_features, key=lambda x: abs(x[1]), reverse=True)
+            # Limit to a smaller number of features for better readability
+            max_features = 6  # Adjust this number based on your needs
             
-            # Combine the lists with the biggest impact features first
-            all_features = pos_features + neg_features
+            # Keep only the most influential features
+            neg_features = neg_features[:min(max_features//2, len(neg_features))]
+            pos_features = pos_features[:min(max_features//2, len(pos_features))]
             
             # Add higher/lower indicators
             ax.text(2, 0.45, "higher", ha='center', va='center', color='#ff0051', fontsize=10)
@@ -342,23 +346,63 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.plot([base_value_pos], [0], 'o', markersize=8, color='#888888')
             
             # Add feature labels below
-            for feat, pos in x_positions.items():
-                # Get impact value
-                impact = next(i for f, i, v in feature_impacts if f == feat)
+            # First, group features by similar positions to avoid overlapping
+            pos_threshold = 0.5  # Features closer than this will be grouped
+            grouped_positions = {}
+            
+            # Group features by position proximity
+            for feat, pos in sorted(x_positions.items(), key=lambda x: x[1]):
+                # Find if this feature is close to an existing group
+                found_group = False
+                for group_pos, feats in grouped_positions.items():
+                    if abs(pos - group_pos) < pos_threshold:
+                        feats.append(feat)
+                        found_group = True
+                        break
                 
-                # Determine color based on impact
-                color = '#ff0051' if impact > 0 else '#008bfb'
+                # If not close to any group, create a new group
+                if not found_group:
+                    grouped_positions[pos] = [feat]
+            
+            # Now display labels with appropriate offsets for each group
+            for group_pos, feats in grouped_positions.items():
+                # Calculate vertical positions for each feature in group
+                if len(feats) == 1:
+                    # Single feature, display normally
+                    feat = feats[0]
+                    impact = next(i for f, i, v in feature_impacts if f == feat)
+                    color = '#ff0051' if impact > 0 else '#008bfb'
+                    
+                    # Get label text
+                    if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                        orig_val = input_data[feat]
+                        display_feat = f"{feat}_{orig_val}"
+                    else:
+                        display_feat = feat
+                    
+                    # Add feature name and impact value
+                    ax.text(group_pos, -0.35, display_feat, ha='center', va='center', fontsize=8, color=color)
+                    ax.text(group_pos, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
                 
-                # Get original value for categorical features
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    orig_val = input_data[feat]
-                    display_feat = f"{feat}_{orig_val}"
                 else:
-                    display_feat = feat
-                
-                # Add feature name and impact value
-                ax.text(pos, -0.35, display_feat, ha='center', va='center', fontsize=8, color=color)
-                ax.text(pos, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
+                    # Multiple features in one position, need to offset
+                    for i, feat in enumerate(feats):
+                        impact = next(i for f, i, v in feature_impacts if f == feat)
+                        color = '#ff0051' if impact > 0 else '#008bfb'
+                        
+                        # Get label text
+                        if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                            orig_val = input_data[feat]
+                            display_feat = f"{feat}_{orig_val}"
+                        else:
+                            display_feat = feat
+                        
+                        # Calculate horizontal offset to prevent overlapping
+                        offset = (i - (len(feats) - 1) / 2) * 0.8
+                        
+                        # Add feature name and impact value with offset
+                        ax.text(group_pos + offset, -0.35, display_feat, ha='center', va='center', fontsize=8, color=color)
+                        ax.text(group_pos + offset, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
             
             # Remove y-axis ticks and axis borders
             ax.set_yticks([])
