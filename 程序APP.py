@@ -468,10 +468,10 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             st.dataframe(feature_contrib)
             
-            # Display the top 5 influential features as text
+            # Display the top 8 influential features as text
             st.subheader("Top Feature Impacts")
             st.markdown("Key factors affecting prediction:")
-            for feat, impact, val in sorted_features[:5]:
+            for feat, impact, val in sorted_features[:8]:
                 direction = "increases" if impact > 0 else "decreases"
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
                     orig_val = input_data[feat]
