@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 13:39:48 2025
+Created on Tue May 13 13:48:35 2025
 
 @author: LENOVO
 """
@@ -195,7 +195,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             impacts = coeffs * feature_values
             
             # Create the SHAP-style force plot
-            fig, ax = plt.subplots(figsize=(14, 5))
+            fig, ax = plt.subplots(figsize=(15, 6))  # Increased height from 5 to 6
             
             # Base value and prediction
             base_value = 0.5  # For logistic regression, base value is typically 0.5
@@ -208,7 +208,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             # Set up plot parameters
             ax.set_xlim(xlim_min, xlim_max)
-            ax.set_ylim(-1.2, 0.7)  # Increased bottom margin for labels
+            ax.set_ylim(-1.5, 0.7)  # Increased bottom margin for labels to accommodate staggered text
             
             # Draw horizontal line for x-axis
             ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1)
@@ -230,12 +230,32 @@ if st.button("Predict Fever Risk", use_container_width=True):
             pos_features = [(f, i, v) for f, i, v in feature_impacts if i > 0]
             pos_features = sorted(pos_features, key=lambda x: x[1], reverse=True)  # Sort from most positive to least positive
             
-            # Limit to a smaller number of features for better readability
-            max_features = 8  # Changed from 6 to 8 as requested
+            # Limit to a larger number of features to ensure MayoScore_bin is included
+            max_features = 10  # Increased from 8 to 10 to include more features
+            
+            # Make sure MayoScore_bin is included if it exists in feature_impacts
+            has_mayo_score = any(feat == "MayoScore_bin" for feat, _, _ in feature_impacts)
             
             # Keep only the most influential features
             neg_features = neg_features[:min(max_features//2, len(neg_features))]
             pos_features = pos_features[:min(max_features//2, len(pos_features))]
+            
+            # If MayoScore_bin exists but is not in either list, add it to the appropriate list
+            if has_mayo_score:
+                mayo_impact = next((i for f, i, v in feature_impacts if f == "MayoScore_bin"), None)
+                mayo_value = next((v for f, i, v in feature_impacts if f == "MayoScore_bin"), None)
+                
+                if mayo_impact is not None and mayo_value is not None:
+                    # Check if MayoScore_bin is already in either list
+                    in_neg = any(feat == "MayoScore_bin" for feat, _, _ in neg_features)
+                    in_pos = any(feat == "MayoScore_bin" for feat, _, _ in pos_features)
+                    
+                    if not (in_neg or in_pos):
+                        # Add to appropriate list based on impact
+                        if mayo_impact < 0:
+                            neg_features.append(("MayoScore_bin", mayo_impact, mayo_value))
+                        else:
+                            pos_features.append(("MayoScore_bin", mayo_impact, mayo_value))
             
             # Add higher/lower indicators
             ax.text(2, 0.45, "higher", ha='center', va='center', color='#ff0051', fontsize=10)
@@ -348,9 +368,9 @@ if st.button("Predict Fever Risk", use_container_width=True):
             # Mark base value with circle
             ax.plot([base_value_pos], [0], 'o', markersize=8, color='#888888')
             
-            # Add feature labels below
+            # Add feature labels below with improved spacing to avoid overlapping
             # First, group features by similar positions to avoid overlapping
-            pos_threshold = 0.5  # Features closer than this will be grouped
+            pos_threshold = 0.8  # Increased from 0.5 to allow more space between groups
             grouped_positions = {}
             
             # Group features by position proximity
@@ -388,7 +408,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
                     ax.text(group_pos, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
                 
                 else:
-                    # Multiple features in one position, need to offset
+                    # Multiple features in one position, need to offset horizontally and vertically
                     for i, feat in enumerate(feats):
                         impact = next(i for f, i, v in feature_impacts if f == feat)
                         color = '#ff0051' if impact > 0 else '#008bfb'
@@ -401,11 +421,21 @@ if st.button("Predict Fever Risk", use_container_width=True):
                             display_feat = feat
                         
                         # Calculate horizontal offset to prevent overlapping
-                        offset = (i - (len(feats) - 1) / 2) * 0.8
+                        # Increase spacing between features in the same group
+                        offset = (i - (len(feats) - 1) / 2) * 1.2  # Increased from 0.8 to 1.2
+                        
+                        # For groups with many features, use vertical staggering
+                        if len(feats) > 3:
+                            # Alternate vertical positions
+                            vert_offset = -0.35 + (i % 2) * -0.25  # Stagger vertically
+                            value_offset = vert_offset - 0.15  # Value appears below name
+                        else:
+                            vert_offset = -0.35
+                            value_offset = -0.5
                         
                         # Add feature name and impact value with offset
-                        ax.text(group_pos + offset, -0.35, display_feat, ha='center', va='center', fontsize=8, color=color)
-                        ax.text(group_pos + offset, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
+                        ax.text(group_pos + offset, vert_offset, display_feat, ha='center', va='center', fontsize=8, color=color)
+                        ax.text(group_pos + offset, value_offset, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
             
             # Remove y-axis ticks and axis borders
             ax.set_yticks([])
