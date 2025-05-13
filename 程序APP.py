@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Tue May 13 11:44:52 2025
+
+@author: LENOVO
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Tue May 13 09:00:02 2025
 
 @author: LENOVO
@@ -171,53 +178,63 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.axis("equal")
             st.pyplot(fig)
 
-        # ——— FIXED SHAP explanations section ———
+        # ——— SHAP force plot section ———
         try:
             st.markdown("## Feature Impact Analysis")
-            st.info("Red bars increase fever risk; blue bars decrease risk.")
+            st.info("Red features increase fever risk; blue features decrease risk.")
             
-            # Convert feature to simpler feature importance display
-            # This avoids potential rendering issues with SHAP plots
-            feature_importance = pd.DataFrame({
-                'Feature': df.columns.tolist(),
-                'Importance': np.abs(model.coef_[0])  # Use absolute coefficient values as importance
-            }).sort_values('Importance', ascending=False)
+            # Create SHAP explainer using the model
+            explainer = shap.LinearExplainer(model, df)
             
-            # Create bar chart of feature importance
-            fig, ax = plt.subplots(figsize=(10, 6))
-            bars = ax.barh(feature_importance['Feature'], feature_importance['Importance'])
+            # Calculate SHAP values for the input
+            shap_values = explainer.shap_values(df)
             
-            # Add color coding based on coefficient direction
-            for i, feature in enumerate(feature_importance['Feature']):
-                idx = list(df.columns).index(feature)
-                coef = model.coef_[0][idx]
-                bars[i].set_color('red' if coef > 0 else 'blue')
-                
-            ax.set_xlabel('Feature Importance')
-            ax.set_title('Feature Impact on Fever Risk')
+            # Generate force plot
+            st.subheader("SHAP Force Plot")
+            
+            # Convert to matplotlib figure for Streamlit compatibility
+            plt.figure(figsize=(12, 3))
+            shap.force_plot(
+                explainer.expected_value, 
+                shap_values[0], 
+                df.iloc[0],
+                matplotlib=True,
+                show=False,
+                figsize=(12, 3),
+                text_rotation=45  # Rotate feature names for better readability
+            )
+            plt.title("Feature Contributions to Prediction")
             plt.tight_layout()
-            st.pyplot(fig)
+            st.pyplot(plt)
             
             # Add text explanation of top features
             st.subheader("Top Feature Impacts")
+            
+            # Get absolute SHAP values to identify top features
+            abs_shap_values = np.abs(shap_values[0])
+            feature_importance = pd.DataFrame({
+                'Feature': df.columns.tolist(),
+                'Importance': abs_shap_values
+            }).sort_values('Importance', ascending=False)
+            
             top_features = feature_importance.head(5)['Feature'].tolist()
             
             st.markdown("### Key factors affecting prediction:")
             for feature in top_features:
-                idx = list(df.columns).index(feature)
-                coef = model.coef_[0][idx]
-                direction = "increases" if coef > 0 else "decreases"
+                idx = df.columns.get_loc(feature)
+                shap_val = shap_values[0][idx]
+                direction = "increases" if shap_val > 0 else "decreases"
                 value = df.iloc[0][feature]
                 
                 if feature in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
                     # Handle categorical features differently
                     orig_value = input_data[feature]  # Get original value before encoding
-                    st.markdown(f"- **{feature}** ({orig_value}): {direction} fever risk")
+                    st.markdown(f"- **{feature}** ({orig_value}): {direction} fever risk (SHAP value: {shap_val:.4f})")
                 else:
-                    st.markdown(f"- **{feature}** = {value}: {direction} fever risk")
+                    st.markdown(f"- **{feature}** = {value}: {direction} fever risk (SHAP value: {shap_val:.4f})")
             
         except Exception as e:
-            st.warning(f"Could not generate feature importance visualization: {str(e)}")
+            st.warning(f"Could not generate SHAP visualization: {str(e)}")
             
             # Simple fallback visualization without SHAP
             try:
