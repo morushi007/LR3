@@ -125,3 +125,9 @@ for idx, (feat, cfg) in enumerate(feature_ranges.items()):
         else:
             input_data[feat] = st.selectbox(
                 label=f"{cfg['description']} ({feat})",
+            
+           input_data[feat] = st.selectbox(
+               label=f"{cfg['description']} ({feat})",
+               options=cfg["options"],
+               index=cfg["options"].index(cfg["default"])
+           )
