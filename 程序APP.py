@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 13:01:17 2025
+Created on Tue May 13 13:09:05 2025
 
 @author: LENOVO
 """
@@ -173,6 +173,10 @@ if st.button("Predict Fever Risk", use_container_width=True):
 
         # ——— SHAP Force Plot visualization ———
         try:
+            # Import needed matplotlib components
+            from matplotlib.path import Path
+            from matplotlib.patches import PathPatch
+            
             st.markdown("## Feature Impact Analysis")
             st.markdown("""
             <div style="padding:10px;border-radius:5px;background-color:#f0f2f6;">
@@ -264,32 +268,21 @@ if st.button("Predict Fever Risk", use_container_width=True):
                     (start_x, height)    # top left
                 ]
                 
-                # Create chevron/arrow shape at the end
-                arrow_width = min(abs(impact) * 0.3, 0.5)  # Scale arrow width with impact
-                arrow_verts = [
-                    (end_x, -height),              # bottom 
-                    (end_x - arrow_width, 0),      # middle point (arrow tip)
-                    (end_x, height)                # top
-                ]
-                
                 # Create polygon for main trapezoid
-                codes = [
-                    Path.MOVETO,     # start at bottom left
-                    Path.LINETO,     # line to bottom right
-                    Path.LINETO,     # line to top right
-                    Path.LINETO,     # line to top left
-                    Path.CLOSEPOLY   # close shape
+                trap = plt.Polygon(verts, closed=True, fill=True, 
+                                  facecolor='#008bfb', alpha=0.6, edgecolor=None)
+                ax.add_patch(trap)
+                
+                # Create chevron/arrow shape at the end using a triangle
+                arrow_width = min(abs(impact) * 0.3, 0.5)
+                arrow_verts = [
+                    (end_x, -height),
+                    (end_x - arrow_width, 0),
+                    (end_x, height)
                 ]
-                
-                # Add main trapezoid
-                path = Path(verts + [(0, 0)], codes)  # Add dummy point for CLOSEPOLY
-                patch = PathPatch(path, facecolor='#008bfb', alpha=0.6, edgecolor=None)
-                ax.add_patch(patch)
-                
-                # Add arrow tip
-                arrow_path = Path(arrow_verts, [Path.MOVETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY])
-                arrow_patch = PathPatch(arrow_path, facecolor='#008bfb', alpha=0.8, edgecolor=None)
-                ax.add_patch(arrow_patch)
+                arrow = plt.Polygon(arrow_verts, closed=True, fill=True,
+                                   facecolor='#008bfb', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow)
                 
                 # Store position for label
                 x_positions[feat] = (start_x + end_x) / 2
@@ -323,32 +316,21 @@ if st.button("Predict Fever Risk", use_container_width=True):
                     (start_x, height)    # top left
                 ]
                 
-                # Create chevron/arrow shape at the end
-                arrow_width = min(abs(impact) * 0.3, 0.5)  # Scale arrow width with impact
-                arrow_verts = [
-                    (end_x, -height),             # bottom 
-                    (end_x + arrow_width, 0),     # middle point (arrow tip)
-                    (end_x, height)               # top
-                ]
-                
                 # Create polygon for main trapezoid
-                codes = [
-                    Path.MOVETO,     # start at bottom left
-                    Path.LINETO,     # line to bottom right
-                    Path.LINETO,     # line to top right
-                    Path.LINETO,     # line to top left
-                    Path.CLOSEPOLY   # close shape
+                trap = plt.Polygon(verts, closed=True, fill=True,
+                                  facecolor='#ff0051', alpha=0.6, edgecolor=None)
+                ax.add_patch(trap)
+                
+                # Create chevron/arrow shape at the end
+                arrow_width = min(abs(impact) * 0.3, 0.5)
+                arrow_verts = [
+                    (end_x, -height),
+                    (end_x + arrow_width, 0),
+                    (end_x, height)
                 ]
-                
-                # Add main trapezoid
-                path = Path(verts + [(0, 0)], codes)  # Add dummy point for CLOSEPOLY
-                patch = PathPatch(path, facecolor='#ff0051', alpha=0.6, edgecolor=None)
-                ax.add_patch(patch)
-                
-                # Add arrow tip
-                arrow_path = Path(arrow_verts, [Path.MOVETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY])
-                arrow_patch = PathPatch(arrow_path, facecolor='#ff0051', alpha=0.8, edgecolor=None)
-                ax.add_patch(arrow_patch)
+                arrow = plt.Polygon(arrow_verts, closed=True, fill=True,
+                                   facecolor='#ff0051', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow)
                 
                 # Store position for label
                 x_positions[feat] = (start_x + end_x) / 2
@@ -388,9 +370,6 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             plt.tight_layout()
             st.pyplot(fig)
-            
-            from matplotlib.path import Path
-            from matplotlib.patches import PathPatch
             
             # Explanation
             st.subheader("How to interpret this visualization")
