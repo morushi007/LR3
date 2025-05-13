@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 12:40:31 2025
+Created on Tue May 13 12:49:01 2025
 
 @author: LENOVO
 """
@@ -188,111 +188,155 @@ if st.button("Predict Fever Risk", use_container_width=True):
             # Calculate feature impacts (coefficient * value)
             impacts = coeffs * feature_values
             
-            # Create a SHAP-style force plot visualization
-            # This is a custom implementation since we're not using actual SHAP values
-            
-            # Create the SHAP force plot
-            fig, ax = plt.subplots(figsize=(10, 4))
+            # Create the SHAP-style force plot (waterfall style)
+            fig, ax = plt.subplots(figsize=(12, 5))
             
             # Base value (typically set at 0.5 for logistic regression probability)
             base_value = 0.5
             prediction = model.predict_proba(df)[0][1]
             
-            # Normalize impacts for better visualization
-            total_impact = sum(impacts)
-            
-            # Sort features by absolute impact
+            # Sort features by impact (not by absolute value)
+            # This creates a more coherent visualization where we see progression from negative to positive
             feature_impacts = list(zip(feature_names, impacts, feature_values))
-            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
             
-            # Select top features for display
-            top_n = 8  # Adjust based on needs
-            top_features = sorted_features[:top_n]
+            # We'll sort features by their impact, but we want negative impacts first
+            neg_features = sorted([(f, i, v) for f, i, v in feature_impacts if i < 0], key=lambda x: x[1])
+            pos_features = sorted([(f, i, v) for f, i, v in feature_impacts if i > 0], key=lambda x: x[1], reverse=True)
             
-            # Separate positive and negative impacts
-            pos_features = [(f, i, v) for f, i, v in top_features if i > 0]
-            neg_features = [(f, i, v) for f, i, v in top_features if i < 0]
+            # Create a list of x-axis positions for plotting
+            x_ticks = [-10, -8, -6, -4, -2, 0, 2, 4]
             
-            # Setup plot parameters
-            plot_height = 0.8
-            y_pos = 0.5
+            # Draw the x-axis
+            ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1, zorder=1)
             
-            # Draw baseline
-            ax.axvline(x=0, color='#cccccc', linestyle='-', linewidth=1, zorder=1)
-            
-            # Set plot limits with some padding
-            max_impact = max([abs(i) for _, i, _ in top_features]) * 1.2 if top_features else 1
-            ax.set_xlim(-max_impact, max_impact)
-            ax.set_ylim(0, 1)
-            
-            # Draw the base value text
-            ax.text(0, y_pos-0.15, f"base value\n{base_value:.2f}", ha='center', va='top', fontsize=10)
-            
-            # Draw arrows for direction
-            ax.text(max_impact*0.85, y_pos-0.15, "higher", ha='center', va='top', color='#ff0051', fontsize=10)
-            ax.text(-max_impact*0.85, y_pos-0.15, "lower", ha='center', va='top', color='#008bfb', fontsize=10)
-            
-            # Draw prediction value
-            offset = sum(impacts)
-            adjusted_pred_position = min(max(offset, -max_impact*0.7), max_impact*0.7)  # Constrain within visible area
-            ax.text(adjusted_pred_position, y_pos+0.15, f"prediction\n{prediction:.2f}", ha='center', va='bottom', fontsize=10, bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
-            
-            # Draw the force bars
-            cumulative_pos = 0
-            cumulative_neg = 0
-            
-            # Draw positive impacts (red)
-            for i, (feat, impact, val) in enumerate(pos_features):
-                width = impact
-                left = cumulative_pos
-                
-                # Draw the bar
-                ax.barh(y_pos, width, height=plot_height, left=left, color='#ff0051', alpha=0.7, zorder=2)
-                
-                # Add feature name and value
-                if isinstance(val, (int, float)) and not feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
-                    label = f"{feat}\n{val:.2f}"
-                else:
-                    # For categorical features, show the original value
-                    orig_val = input_data[feat]
-                    label = f"{feat}\n{orig_val}"
-                
-                # Place label at center of bar
-                label_x = left + width/2
-                ax.text(label_x, y_pos, label, ha='center', va='center', color='white', fontsize=9, fontweight='bold')
-                
-                cumulative_pos += width
-            
-            # Draw negative impacts (blue)
-            for i, (feat, impact, val) in enumerate(neg_features):
-                width = abs(impact)
-                left = cumulative_neg
-                
-                # Draw the bar
-                ax.barh(y_pos, width, height=plot_height, left=-left-width, color='#008bfb', alpha=0.7, zorder=2)
-                
-                # Add feature name and value
-                if isinstance(val, (int, float)) and not feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
-                    label = f"{feat}\n{val:.2f}"
-                else:
-                    # For categorical features, show the original value
-                    orig_val = input_data[feat]
-                    label = f"{feat}\n{orig_val}"
-                
-                # Place label at center of bar
-                label_x = -left - width/2
-                ax.text(label_x, y_pos, label, ha='center', va='center', color='white', fontsize=9, fontweight='bold')
-                
-                cumulative_neg += width
-            
-            # Remove axes and spines
+            # Set up the general plot parameters
+            ax.set_xlim(min(x_ticks), max(x_ticks))
+            ax.set_ylim(-0.8, 0.8)
             ax.set_yticks([])
-            ax.set_xticks([])
-            for spine in ax.spines.values():
-                spine.set_visible(False)
+            
+            # Add tick marks to x-axis
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels([str(x) for x in x_ticks], fontsize=8)
+            
+            # Create a color gradient for positive and negative features
+            # Using semi-transparent colors for the areas
+            red_color = '#ff0051'
+            blue_color = '#008bfb'
+            
+            # Mark the base value
+            base_x = -4  # Position on x-axis
+            ax.text(base_x, 0.1, "base value", ha='center', va='bottom', fontsize=10, color='#888888')
+            ax.plot([base_x], [0], 'o', color='#888888', markersize=8)
+            
+            # Draw the prediction marker and label
+            pred_x = 2.9  # Estimated position for the prediction
+            ax.text(pred_x, 0.35, "f(x)\n" + f"{prediction:.2f}", ha='center', va='bottom', fontsize=10)
+            
+            # Add direction labels
+            ax.text(1.7, 0.35, "higher", ha='center', va='bottom', color=red_color, fontsize=10)
+            ax.text(3.8, 0.35, "lower", ha='center', va='bottom', color=blue_color, fontsize=10)
+            
+            # Draw the feature contributions
+            # First, we'll draw arrowheads to show direction and magnitude
+            y_height = -0.4  # Height for feature labels
+            
+            # Now we start plotting features as arrows with labels
+            # Define arrow properties
+            arrow_props = dict(
+                arrowstyle="wedge,tail_width=0.7",
+                shrinkA=0,
+                shrinkB=0,
+                linewidth=0,
+                zorder=3
+            )
+            
+            # Draw arrow for base value
+            current_x = base_x
+            
+            # Draw positive features (pushing prediction higher)
+            for i, (feat, impact, val) in enumerate(pos_features):
+                # Scale impact for visualization
+                scaled_impact = impact * 0.8  # Adjust scaling factor as needed
+                
+                # Determine start and end points for arrow
+                start_x = current_x
+                end_x = current_x + scaled_impact
+                
+                # Draw arrow (positive impact)
+                ax.add_patch(plt.Polygon(
+                    [[start_x, 0], [end_x, 0], [end_x, 0.4]],
+                    closed=True, 
+                    facecolor=red_color, 
+                    alpha=0.7
+                ))
+                
+                # Add feature label and value
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    # For categorical features, show the original value
+                    orig_val = input_data[feat]
+                    label_text = f"{feat}_{orig_val}"
+                else:
+                    label_text = f"{feat}"
+                    
+                # Show value as a separate line
+                value_text = f"{scaled_impact:.2f}"
+                
+                # Position labels below the arrow at consistent height
+                ax.text(start_x + scaled_impact/2, y_height, label_text, 
+                        ha='center', va='bottom', fontsize=8, color=red_color, rotation=0)
+                ax.text(start_x + scaled_impact/2, y_height-0.1, value_text, 
+                        ha='center', va='bottom', fontsize=8, color=red_color)
+                
+                # Update current position
+                current_x = end_x
+            
+            # Reset to base value for negative features
+            current_x = base_x
+            
+            # Draw negative features (pushing prediction lower)
+            for i, (feat, impact, val) in enumerate(neg_features):
+                # Scale impact for visualization (absolute value as it's negative)
+                scaled_impact = impact * 0.8  # Adjust scaling factor as needed
+                
+                # Determine start and end points for arrow
+                start_x = current_x
+                end_x = current_x + scaled_impact  # Note: impact is already negative
+                
+                # Draw arrow (negative impact)
+                ax.add_patch(plt.Polygon(
+                    [[start_x, 0], [end_x, 0], [end_x, 0.4]],
+                    closed=True, 
+                    facecolor=blue_color, 
+                    alpha=0.7
+                ))
+                
+                # Add feature label and value
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    # For categorical features, show the original value
+                    orig_val = input_data[feat]
+                    label_text = f"{feat}_{orig_val}"
+                else:
+                    label_text = f"{feat}"
+                    
+                # Show value as a separate line
+                value_text = f"{scaled_impact:.2f}"
+                
+                # Position labels below the arrow at consistent height
+                ax.text(start_x + scaled_impact/2, y_height, label_text, 
+                        ha='center', va='bottom', fontsize=8, color=blue_color, rotation=0)
+                ax.text(start_x + scaled_impact/2, y_height-0.1, value_text, 
+                        ha='center', va='bottom', fontsize=8, color=blue_color)
+                
+                # Update current position
+                current_x = end_x
+            
+            # Remove y-axis ticks and spines
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['top'].set_visible(False)
             
             # Add title
-            ax.set_title(f"Features pushing prediction from base value ({base_value:.2f}) to {prediction:.2f}", fontsize=12)
+            ax.set_title(f"Features pushing prediction from base value (0.50) to {prediction:.2f}", fontsize=12)
             
             plt.tight_layout()
             st.pyplot(fig)
