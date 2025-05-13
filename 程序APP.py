@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 13:15:28 2025
+Created on Tue May 13 13:39:48 2025
 
 @author: LENOVO
 """
@@ -73,7 +73,9 @@ with st.sidebar:
     - **LMR**: Lymphocyte-to-Monocyte Ratio  
     - **PLR**: Platelet-to-Lymphocyte Ratio  
     - **BMI**: Body Mass Index  
-    - **Mayo Score**: Mayo Surgical Complexity Score  
+    - **Mayo Score**: Mayo Surgical Complexity Score for PCNL procedures
+      - Scores < 3: Lower surgical complexity
+      - Scores ≥ 3: Higher surgical complexity
     """)
 
 # ——— Feature configuration ———
@@ -218,6 +220,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             # Sort features by impact for visualization
             feature_impacts = list(zip(feature_names, impacts, feature_values))
+            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
             
             # First get sorted negative impacts (pushing prediction lower)
             neg_features = [(f, i, v) for f, i, v in feature_impacts if i < 0]
@@ -228,7 +231,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             pos_features = sorted(pos_features, key=lambda x: x[1], reverse=True)  # Sort from most positive to least positive
             
             # Limit to a smaller number of features for better readability
-            max_features = 6  # Adjust this number based on your needs
+            max_features = 8  # Changed from 6 to 8 as requested
             
             # Keep only the most influential features
             neg_features = neg_features[:min(max_features//2, len(neg_features))]
