@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Tue May 13 21:26:30 2025
+
+@author: LENOVO
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Tue May 13 13:48:35 2025
 
 @author: LENOVO
@@ -202,8 +209,8 @@ if st.button("Predict Fever Risk", use_container_width=True):
             prediction = model.predict_proba(df)[0][1]
             
             # Setup x-axis
-            xlim_min = -10
-            xlim_max = 4
+            xlim_min = -8
+            xlim_max = 6
             base_value_pos = -4  # Position of base value on x-axis
             
             # Set up plot parameters
