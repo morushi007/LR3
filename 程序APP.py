@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 12:49:01 2025
+Created on Tue May 13 13:01:17 2025
 
 @author: LENOVO
 """
@@ -188,158 +188,209 @@ if st.button("Predict Fever Risk", use_container_width=True):
             # Calculate feature impacts (coefficient * value)
             impacts = coeffs * feature_values
             
-            # Create the SHAP-style force plot (waterfall style)
-            fig, ax = plt.subplots(figsize=(12, 5))
+            # Create the SHAP-style force plot
+            fig, ax = plt.subplots(figsize=(12, 3))
             
-            # Base value (typically set at 0.5 for logistic regression probability)
-            base_value = 0.5
+            # Base value and prediction
+            base_value = 0.5  # For logistic regression, base value is typically 0.5
             prediction = model.predict_proba(df)[0][1]
             
-            # Sort features by impact (not by absolute value)
-            # This creates a more coherent visualization where we see progression from negative to positive
-            feature_impacts = list(zip(feature_names, impacts, feature_values))
+            # Setup x-axis
+            xlim_min = -10
+            xlim_max = 4
+            base_value_pos = -4  # Position of base value on x-axis
             
-            # We'll sort features by their impact, but we want negative impacts first
-            neg_features = sorted([(f, i, v) for f, i, v in feature_impacts if i < 0], key=lambda x: x[1])
-            pos_features = sorted([(f, i, v) for f, i, v in feature_impacts if i > 0], key=lambda x: x[1], reverse=True)
+            # Set up plot parameters
+            ax.set_xlim(xlim_min, xlim_max)
+            ax.set_ylim(-0.7, 0.7)  # Give room for labels below
             
-            # Create a list of x-axis positions for plotting
+            # Draw horizontal line for x-axis
+            ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1)
+            
+            # Add x-axis ticks
             x_ticks = [-10, -8, -6, -4, -2, 0, 2, 4]
-            
-            # Draw the x-axis
-            ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1, zorder=1)
-            
-            # Set up the general plot parameters
-            ax.set_xlim(min(x_ticks), max(x_ticks))
-            ax.set_ylim(-0.8, 0.8)
-            ax.set_yticks([])
-            
-            # Add tick marks to x-axis
             ax.set_xticks(x_ticks)
             ax.set_xticklabels([str(x) for x in x_ticks], fontsize=8)
             
-            # Create a color gradient for positive and negative features
-            # Using semi-transparent colors for the areas
-            red_color = '#ff0051'
-            blue_color = '#008bfb'
+            # Sort features by impact
+            feature_impacts = list(zip(feature_names, impacts, feature_values))
             
-            # Mark the base value
-            base_x = -4  # Position on x-axis
-            ax.text(base_x, 0.1, "base value", ha='center', va='bottom', fontsize=10, color='#888888')
-            ax.plot([base_x], [0], 'o', color='#888888', markersize=8)
+            # Create separate lists for negative and positive impacts
+            neg_features = [(f, i, v) for f, i, v in feature_impacts if i < 0]
+            pos_features = [(f, i, v) for f, i, v in feature_impacts if i > 0]
             
-            # Draw the prediction marker and label
-            pred_x = 2.9  # Estimated position for the prediction
-            ax.text(pred_x, 0.35, "f(x)\n" + f"{prediction:.2f}", ha='center', va='bottom', fontsize=10)
+            # Sort by absolute impact
+            neg_features = sorted(neg_features, key=lambda x: abs(x[1]), reverse=True)
+            pos_features = sorted(pos_features, key=lambda x: abs(x[1]), reverse=True)
             
-            # Add direction labels
-            ax.text(1.7, 0.35, "higher", ha='center', va='bottom', color=red_color, fontsize=10)
-            ax.text(3.8, 0.35, "lower", ha='center', va='bottom', color=blue_color, fontsize=10)
+            # Combine the lists with the biggest impact features first
+            all_features = pos_features + neg_features
             
-            # Draw the feature contributions
-            # First, we'll draw arrowheads to show direction and magnitude
-            y_height = -0.4  # Height for feature labels
+            # Add higher/lower indicators
+            ax.text(2, 0.45, "higher", ha='center', va='center', color='#ff0051', fontsize=10)
+            ax.text(3, 0.45, "lower", ha='center', va='center', color='#008bfb', fontsize=10)
             
-            # Now we start plotting features as arrows with labels
-            # Define arrow properties
-            arrow_props = dict(
-                arrowstyle="wedge,tail_width=0.7",
-                shrinkA=0,
-                shrinkB=0,
-                linewidth=0,
-                zorder=3
-            )
+            # Add f(x) value
+            ax.text(2.5, 0.6, f"f(x)\n{prediction:.2f}", ha='center', va='center', fontsize=10)
             
-            # Draw arrow for base value
-            current_x = base_x
+            # Add base value text
+            ax.text(base_value_pos, 0.45, "base value", ha='center', va='center', color='#888888', fontsize=10)
             
-            # Draw positive features (pushing prediction higher)
-            for i, (feat, impact, val) in enumerate(pos_features):
-                # Scale impact for visualization
-                scaled_impact = impact * 0.8  # Adjust scaling factor as needed
-                
-                # Determine start and end points for arrow
-                start_x = current_x
-                end_x = current_x + scaled_impact
-                
-                # Draw arrow (positive impact)
-                ax.add_patch(plt.Polygon(
-                    [[start_x, 0], [end_x, 0], [end_x, 0.4]],
-                    closed=True, 
-                    facecolor=red_color, 
-                    alpha=0.7
-                ))
-                
-                # Add feature label and value
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    # For categorical features, show the original value
-                    orig_val = input_data[feat]
-                    label_text = f"{feat}_{orig_val}"
-                else:
-                    label_text = f"{feat}"
-                    
-                # Show value as a separate line
-                value_text = f"{scaled_impact:.2f}"
-                
-                # Position labels below the arrow at consistent height
-                ax.text(start_x + scaled_impact/2, y_height, label_text, 
-                        ha='center', va='bottom', fontsize=8, color=red_color, rotation=0)
-                ax.text(start_x + scaled_impact/2, y_height-0.1, value_text, 
-                        ha='center', va='bottom', fontsize=8, color=red_color)
-                
-                # Update current position
-                current_x = end_x
+            # Draw continuous flow plot
+            current_x = base_value_pos
+            x_positions = {}  # To track feature positions for label placement
             
-            # Reset to base value for negative features
-            current_x = base_x
-            
-            # Draw negative features (pushing prediction lower)
+            # Generate continuous segments
+            # For negative values (blue, to the left)
             for i, (feat, impact, val) in enumerate(neg_features):
-                # Scale impact for visualization (absolute value as it's negative)
-                scaled_impact = impact * 0.8  # Adjust scaling factor as needed
-                
-                # Determine start and end points for arrow
-                start_x = current_x
-                end_x = current_x + scaled_impact  # Note: impact is already negative
-                
-                # Draw arrow (negative impact)
-                ax.add_patch(plt.Polygon(
-                    [[start_x, 0], [end_x, 0], [end_x, 0.4]],
-                    closed=True, 
-                    facecolor=blue_color, 
-                    alpha=0.7
-                ))
-                
-                # Add feature label and value
+                # Get the original binary value for categorical features
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    # For categorical features, show the original value
                     orig_val = input_data[feat]
-                    label_text = f"{feat}_{orig_val}"
+                    display_name = f"{feat}_{orig_val}"
                 else:
-                    label_text = f"{feat}"
-                    
-                # Show value as a separate line
-                value_text = f"{scaled_impact:.2f}"
+                    display_name = feat
                 
-                # Position labels below the arrow at consistent height
-                ax.text(start_x + scaled_impact/2, y_height, label_text, 
-                        ha='center', va='bottom', fontsize=8, color=blue_color, rotation=0)
-                ax.text(start_x + scaled_impact/2, y_height-0.1, value_text, 
-                        ha='center', va='bottom', fontsize=8, color=blue_color)
+                # Calculate segment points
+                start_x = current_x
+                end_x = current_x + impact  # impact is negative
+                
+                # Draw gradient-filled trapezoid for this feature
+                # First create a trapezoid path
+                height = 0.15
+                verts = [
+                    (start_x, -height),  # bottom left
+                    (end_x, -height),    # bottom right
+                    (end_x, height),     # top right
+                    (start_x, height)    # top left
+                ]
+                
+                # Create chevron/arrow shape at the end
+                arrow_width = min(abs(impact) * 0.3, 0.5)  # Scale arrow width with impact
+                arrow_verts = [
+                    (end_x, -height),              # bottom 
+                    (end_x - arrow_width, 0),      # middle point (arrow tip)
+                    (end_x, height)                # top
+                ]
+                
+                # Create polygon for main trapezoid
+                codes = [
+                    Path.MOVETO,     # start at bottom left
+                    Path.LINETO,     # line to bottom right
+                    Path.LINETO,     # line to top right
+                    Path.LINETO,     # line to top left
+                    Path.CLOSEPOLY   # close shape
+                ]
+                
+                # Add main trapezoid
+                path = Path(verts + [(0, 0)], codes)  # Add dummy point for CLOSEPOLY
+                patch = PathPatch(path, facecolor='#008bfb', alpha=0.6, edgecolor=None)
+                ax.add_patch(patch)
+                
+                # Add arrow tip
+                arrow_path = Path(arrow_verts, [Path.MOVETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY])
+                arrow_patch = PathPatch(arrow_path, facecolor='#008bfb', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow_patch)
+                
+                # Store position for label
+                x_positions[feat] = (start_x + end_x) / 2
                 
                 # Update current position
                 current_x = end_x
             
-            # Remove y-axis ticks and spines
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_visible(False)
-            ax.spines['top'].set_visible(False)
+            # Reset to base value for positive features
+            current_x = base_value_pos
+            
+            # For positive values (red, to the right)
+            for i, (feat, impact, val) in enumerate(pos_features):
+                # Get the original binary value for categorical features
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = input_data[feat]
+                    display_name = f"{feat}_{orig_val}"
+                else:
+                    display_name = feat
+                
+                # Calculate segment points
+                start_x = current_x
+                end_x = current_x + impact  # impact is positive
+                
+                # Draw gradient-filled trapezoid for this feature
+                # First create a trapezoid path
+                height = 0.15
+                verts = [
+                    (start_x, -height),  # bottom left
+                    (end_x, -height),    # bottom right
+                    (end_x, height),     # top right
+                    (start_x, height)    # top left
+                ]
+                
+                # Create chevron/arrow shape at the end
+                arrow_width = min(abs(impact) * 0.3, 0.5)  # Scale arrow width with impact
+                arrow_verts = [
+                    (end_x, -height),             # bottom 
+                    (end_x + arrow_width, 0),     # middle point (arrow tip)
+                    (end_x, height)               # top
+                ]
+                
+                # Create polygon for main trapezoid
+                codes = [
+                    Path.MOVETO,     # start at bottom left
+                    Path.LINETO,     # line to bottom right
+                    Path.LINETO,     # line to top right
+                    Path.LINETO,     # line to top left
+                    Path.CLOSEPOLY   # close shape
+                ]
+                
+                # Add main trapezoid
+                path = Path(verts + [(0, 0)], codes)  # Add dummy point for CLOSEPOLY
+                patch = PathPatch(path, facecolor='#ff0051', alpha=0.6, edgecolor=None)
+                ax.add_patch(patch)
+                
+                # Add arrow tip
+                arrow_path = Path(arrow_verts, [Path.MOVETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY])
+                arrow_patch = PathPatch(arrow_path, facecolor='#ff0051', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow_patch)
+                
+                # Store position for label
+                x_positions[feat] = (start_x + end_x) / 2
+                
+                # Update current position
+                current_x = end_x
+            
+            # Mark base value with circle
+            ax.plot([base_value_pos], [0], 'o', markersize=8, color='#888888')
+            
+            # Add feature labels below
+            for feat, pos in x_positions.items():
+                # Get impact value
+                impact = next(i for f, i, v in feature_impacts if f == feat)
+                
+                # Determine color based on impact
+                color = '#ff0051' if impact > 0 else '#008bfb'
+                
+                # Get original value for categorical features
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = input_data[feat]
+                    display_feat = f"{feat}_{orig_val}"
+                else:
+                    display_feat = feat
+                
+                # Add feature name and impact value
+                ax.text(pos, -0.35, display_feat, ha='center', va='center', fontsize=8, color=color)
+                ax.text(pos, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=8, color=color)
+            
+            # Remove y-axis ticks and axis borders
+            ax.set_yticks([])
+            for spine in ['top', 'right', 'left']:
+                ax.spines[spine].set_visible(False)
             
             # Add title
             ax.set_title(f"Features pushing prediction from base value (0.50) to {prediction:.2f}", fontsize=12)
             
             plt.tight_layout()
             st.pyplot(fig)
+            
+            from matplotlib.path import Path
+            from matplotlib.patches import PathPatch
             
             # Explanation
             st.subheader("How to interpret this visualization")
