@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 16:11:19 2025
+Created on Tue May 13 17:19:27 2025
 
 @author: LENOVO
 """
 
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 13:48:35 2025
-Modified on 2025-05-13 to fix force‐plot clipping and show top 8 features
+Created on Tue May 13 16:11:19 2025
+Modified to fix streamlit error
+
+@author: LENOVO
 """
 
 import streamlit as st
@@ -21,6 +23,7 @@ from sklearn.linear_model import LogisticRegression
 import os
 
 # ——— Page configuration ———
+# IMPORTANT: st.set_page_config() must be the first Streamlit command used in your app
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
