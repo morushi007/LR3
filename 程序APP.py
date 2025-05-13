@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 10:33:02 2025
+Created on Tue May 13 10:37:52 2025
 
 @author: LENOVO
 """
@@ -207,7 +207,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
             
             # Select top features for display
-            top_features = sorted_features[:6]  # Limit to prevent overcrowding
+            top_features = sorted_features[:8]  # Limit to prevent overcrowding
             
             # Calculate scale factor for normalization
             max_abs_impact = max([abs(imp) for _, imp, _ in sorted_features])
@@ -217,47 +217,61 @@ if st.button("Predict Fever Risk", use_container_width=True):
             pos_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i > 0]
             neg_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i < 0]
             
-            # Create force plot visualization with SHAP colors
-            # Create main red area (positive impacts)
-            pos_width = sum(abs(i) for _, i, _ in pos_impacts) 
-            if pos_width > 0:
-                rect_red = plt.Rectangle((-pos_width, 0.1), pos_width, 0.8, color='#ff0051', alpha=0.7)
-                ax.add_patch(rect_red)
+            # Create individual segments for each feature (similar to original SHAP force plot)
+            # Define lighter red and blue colors for variety
+            pos_colors = ['#ff0051', '#ff3373', '#ff6699']  # Various shades of red
+            neg_colors = ['#008bfb', '#33a0ff', '#66b5ff']  # Various shades of blue
             
-            # Create blue area (negative impacts)
-            neg_width = sum(abs(i) for _, i, _ in neg_impacts)
-            if neg_width > 0:
-                rect_blue = plt.Rectangle((0, 0.1), neg_width, 0.8, color='#008bfb', alpha=0.7)
-                ax.add_patch(rect_blue)
-            
-            # Add feature labels
-            # Calculate positions for feature labels
-            all_display_features = pos_impacts + neg_impacts
-            # Sort features by absolute impact for consistent display
-            all_display_features = sorted(all_display_features, key=lambda x: abs(x[1]), reverse=True)
-            
-            # Calculate label positions to spread evenly
-            label_positions = np.linspace(-8, 8, len(all_display_features) + 2)[1:-1]
-            
-            # Display feature labels
-            for i, (feat, impact, val) in enumerate(all_display_features):
-                # Format label based on feature type
+            # Draw positive impact segments (left to right)
+            pos_x = 0
+            for i, (feat, impact, val) in enumerate(pos_impacts):
+                # Select color (cycle through pos_colors)
+                color = pos_colors[i % len(pos_colors)]
+                width = abs(impact)
+                
+                # Draw rectangle for this feature
+                rect = plt.Rectangle((pos_x, 0.1), width, 0.8, color=color, alpha=0.7)
+                ax.add_patch(rect)
+                
+                # Add feature value at bottom
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
                     orig_val = input_data[feat]
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                    ax.text(pos_x + width/2, -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
                 else:
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                    ax.text(pos_x + width/2, -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                
+                pos_x += width
             
-            # Add base value and prediction value indicators
+            # Draw negative impact segments (right to left)
+            neg_x = 0
+            for i, (feat, impact, val) in enumerate(neg_impacts):
+                # Select color (cycle through neg_colors)
+                color = neg_colors[i % len(neg_colors)]
+                width = abs(impact)
+                
+                # Draw rectangle for this feature
+                rect = plt.Rectangle((neg_x, 0.1), -width, 0.8, color=color, alpha=0.7) 
+                ax.add_patch(rect)
+                
+                # Add feature value at bottom
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = input_data[feat]
+                    ax.text(neg_x - width/2, -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                else:
+                    ax.text(neg_x - width/2, -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                
+                neg_x -= width
+            
+            # Add base value and prediction indicators
             ax.text(0, 1.3, f"base value\n{base_value:.2f}", ha='center', fontsize=10)
+            
+            # Calculate normalized prediction position
+            pred_position = pos_x + neg_x
+            ax.text(pred_position, 1.3, f"{prediction_score:.2f}", ha='center', fontsize=10)
             
             # Add higher/lower indicators
             ax.text(8, 1.3, "higher", ha='center', color='#ff0051', fontsize=10)
             ax.text(-8, 1.3, "lower", ha='center', color='#008bfb', fontsize=10)
-            
-            # Add prediction score on the right
-            norm_prediction = (prediction_score - base_value) * 10
-            ax.text(norm_prediction, 1.3, f"{prediction_score:.2f}", ha='center', fontsize=10)
             
             # Remove y-axis ticks and labels
             ax.set_yticks([])
@@ -272,7 +286,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ### How to interpret the visualization:
             - Red features increase the probability of fever
             - Blue features decrease the probability of fever
-            - The longer the bar, the stronger the impact
+            - The wider the colored segment, the stronger the impact
             """)
             
             # Display feature contributions as a table
