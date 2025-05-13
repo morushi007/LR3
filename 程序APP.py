@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 20:18:57 2025
+Created on Tue May 13 20:25:29 2025
 
 @author: LENOVO
 """
@@ -13,25 +13,22 @@ Created on Tue May 13 13:48:35 2025
 """
 
 # app.py
-# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import joblib
-import shap
 from sklearn.linear_model import LogisticRegression
-import os
 
-# ——— Page configuration ———
+# ——— Page configuration - 必须是第一个Streamlit命令 ———
 st.set_page_config(
-    page_title="PCNL Post-Operative Fever Prediction",
+    page_title="PCNL Fever Prediction",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ——— Custom CSS ———
+# ——— 然后是自定义CSS ———
 st.markdown("""
 <style>
     .main { padding: 2rem; }
@@ -48,24 +45,6 @@ st.markdown("""
         margin-top: 2rem;
         text-align: center;
         color: #7F8C8D;
-    }
-    .shap-plot {
-        background-color: white;
-        border-radius: 5px;
-        padding: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-    .shap-explanation {
-        padding: 15px;
-        background-color: #f0f2f6;
-        border-radius: 5px;
-        margin-top: 15px;
-    }
-    .highlight-text {
-        background-color: #e3f2fd;
-        padding: 2px 5px;
-        border-radius: 3px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -202,167 +181,268 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.axis("equal")
             st.pyplot(fig)
 
-        # ——— 改进的SHAP可视化部分 ———
+        # ——— 只保留特征影响力图 ———
         try:
             st.markdown("## Feature Impact Analysis")
             st.markdown("""
             <div style="padding:10px;border-radius:5px;background-color:#f0f2f6;">
-                <p style="margin-bottom:0;"><strong>Red features increase fever risk; blue features decrease risk.</strong></p>
+                <p style="margin-bottom:0;"><strong>Red bars increase fever risk; blue bars decrease risk.</strong></p>
             </div>
             """, unsafe_allow_html=True)
             
-            # 创建SHAP解释器
-            # 对于逻辑回归，我们可以使用LinearExplainer
+            # 计算特征影响
+            coeffs = model.coef_[0]
             feature_names = df.columns.tolist()
+            feature_values = df.iloc[0].values
+            impacts = coeffs * feature_values
             
-            # 创建SHAP解释器 - 为逻辑回归模型特别优化
-            if hasattr(model, "predict_proba"):
-                # 获取背景数据样本 - 在真实应用中，这应该是训练数据的样本
-                # 这里我们只有一个样本作为背景数据
-                background_data = df
-                explainer = shap.LinearExplainer(model, background_data)
+            # 创建力图
+            fig, ax = plt.subplots(figsize=(15, 6))
+            
+            # 基准值设置为0.5（逻辑回归的默认阈值）
+            base_value = 0.5
+            # 最终预测值
+            prediction = model.predict_proba(df)[0][1]
+            
+            # 设置x轴范围
+            # 确定合适的x轴范围
+            max_impact = max(abs(np.max(impacts)), abs(np.min(impacts))) * 1.2
+            xlim_min = -max_impact
+            xlim_max = max_impact
+            
+            # 设置基准值在图表上的位置
+            base_value_pos = 0
+            
+            # 配置图表参数
+            ax.set_xlim(xlim_min, xlim_max)
+            ax.set_ylim(-1.2, 0.5)
+            
+            # 绘制水平基线
+            ax.axhline(y=0, color='#888888', linestyle='-', linewidth=1)
+            
+            # 按影响力排序特征
+            feature_impacts = list(zip(feature_names, impacts, feature_values))
+            
+            # 将特征分为负向影响（蓝色）和正向影响（红色）
+            neg_features = [(f, i, v) for f, i, v in feature_impacts if i < 0]
+            neg_features = sorted(neg_features, key=lambda x: x[1])  # 从最负向到最不负向排序
+            
+            pos_features = [(f, i, v) for f, i, v in feature_impacts if i > 0]
+            pos_features = sorted(pos_features, key=lambda x: x[1], reverse=True)  # 从最正向到最不正向排序
+            
+            # 限制显示的特征数量
+            max_features = min(8, max(len(neg_features), len(pos_features)))
+            neg_features = neg_features[:max_features]
+            pos_features = pos_features[:max_features]
+            
+            # 添加高/低指示器
+            ax.text(xlim_max*0.75, 0.35, "higher", ha='center', va='center', color='#ff0051', fontsize=12)
+            ax.text(xlim_min*0.75, 0.35, "lower", ha='center', va='center', color='#008bfb', fontsize=12)
+            
+            # 添加预测值文本
+            ax.text(0, 0.35, f"base value\n{base_value:.2f}", ha='center', va='center', color='#888888', fontsize=12)
+            ax.text(xlim_max*0.75, 0.15, f"f(x)\n{prediction:.2f}", ha='center', va='center', fontsize=12)
+            
+            # 绘制连续流图
+            current_x = base_value_pos
+            x_positions = {}  # 跟踪特征标签位置
+            
+            # 绘制负向影响（蓝色，向左）
+            for i, (feat, impact, val) in enumerate(neg_features):
+                # 获取分类特征的原始值
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = display_data[feat]
+                    display_name = f"{feat}_{orig_val}"
+                else:
+                    display_name = feat
                 
-                # 计算SHAP值
-                shap_values = explainer.shap_values(df)[0]  # 获取正类的SHAP值
+                # 计算段点
+                start_x = current_x
+                end_x = current_x + impact  # impact为负值
                 
-                # 创建强制图布局的DataFrame
-                shap_df = pd.DataFrame({
-                    'Feature': feature_names,
-                    'SHAP_Value': shap_values,
-                    'Feature_Value': df.values[0],
-                    'Display_Value': [display_data[f] if f in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", 
-                                                            "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"] 
-                                  else df[f].values[0] for f in feature_names]
-                })
+                # 绘制梯形
+                height = 0.15
+                verts = [
+                    (start_x, -height),  # 左下
+                    (end_x, -height),    # 右下
+                    (end_x, height),     # 右上
+                    (start_x, height)    # 左上
+                ]
                 
-                # 根据SHAP值绝对值排序
-                shap_df = shap_df.sort_values(by='SHAP_Value', key=abs, ascending=False)
+                # 创建梯形的多边形
+                trap = plt.Polygon(verts, closed=True, fill=True, 
+                                  facecolor='#008bfb', alpha=0.6, edgecolor=None)
+                ax.add_patch(trap)
                 
-                # 选取前10个最重要的特征
-                top_features = shap_df.head(10)
+                # 创建箭头形状
+                arrow_width = min(abs(impact) * 0.3, 0.5)
+                arrow_verts = [
+                    (end_x, -height),
+                    (end_x - arrow_width, 0),
+                    (end_x, height)
+                ]
+                arrow = plt.Polygon(arrow_verts, closed=True, fill=True,
+                                   facecolor='#008bfb', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow)
                 
-                # 绘制SHAP力图（Matplotlib版本）
-                fig, ax = plt.subplots(figsize=(12, 6))
+                # 记录标签位置
+                x_positions[feat] = (start_x + end_x) / 2
                 
-                # 设置颜色
-                colors = ['#ff0051' if x > 0 else '#008bfb' for x in top_features['SHAP_Value']]
+                # 更新当前位置
+                current_x = end_x
+            
+            # 重置为基准值，处理正向特征
+            current_x = base_value_pos
+            
+            # 绘制正向影响（红色，向右）
+            for i, (feat, impact, val) in enumerate(pos_features):
+                # 获取分类特征的原始值
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = display_data[feat]
+                    display_name = f"{feat}_{orig_val}"
+                else:
+                    display_name = feat
                 
-                # 绘制水平条形图
-                bars = ax.barh(y=range(len(top_features)), width=top_features['SHAP_Value'], color=colors)
+                # 计算段点
+                start_x = current_x
+                end_x = current_x + impact  # impact为正值
                 
-                # 设置Y轴标签 - 包括特征名称和显示值
-                labels = [f"{row['Feature']}={row['Display_Value']}" 
-                         if isinstance(row['Display_Value'], str) 
-                         else f"{row['Feature']}={row['Display_Value']:.2f}" 
-                         for _, row in top_features.iterrows()]
+                # 绘制梯形
+                height = 0.15
+                verts = [
+                    (start_x, -height),  # 左下
+                    (end_x, -height),    # 右下
+                    (end_x, height),     # 右上
+                    (start_x, height)    # 左上
+                ]
                 
-                ax.set_yticks(range(len(top_features)))
-                ax.set_yticklabels(labels)
+                # 创建梯形的多边形
+                trap = plt.Polygon(verts, closed=True, fill=True,
+                                  facecolor='#ff0051', alpha=0.6, edgecolor=None)
+                ax.add_patch(trap)
                 
-                # 添加基线
-                ax.axvline(x=0, color='gray', linestyle='--', alpha=0.7)
+                # 创建箭头形状
+                arrow_width = min(abs(impact) * 0.3, 0.5)
+                arrow_verts = [
+                    (end_x, -height),
+                    (end_x + arrow_width, 0),
+                    (end_x, height)
+                ]
+                arrow = plt.Polygon(arrow_verts, closed=True, fill=True,
+                                   facecolor='#ff0051', alpha=0.8, edgecolor=None)
+                ax.add_patch(arrow)
                 
-                # 设置标题和标签
-                ax.set_title(f"Top Features Impact on Prediction (Base value: {explainer.expected_value:.2f}, Prediction: {model.predict_proba(df)[0][1]:.2f})")
-                ax.set_xlabel('SHAP Value (Impact on prediction)')
+                # 记录标签位置
+                x_positions[feat] = (start_x + end_x) / 2
                 
-                # 添加网格线
-                ax.grid(axis='x', linestyle='--', alpha=0.3)
+                # 更新当前位置
+                current_x = end_x
+            
+            # 标记基准值
+            ax.plot([base_value_pos], [0], 'o', markersize=8, color='#888888')
+            
+            # 按位置将特征分组以避免重叠
+            pos_threshold = 0.8
+            grouped_positions = {}
+            
+            # 按位置亲近度分组特征
+            for feat, pos in sorted(x_positions.items(), key=lambda x: x[1]):
+                # 检查这个特征是否靠近已有分组
+                found_group = False
+                for group_pos, feats in grouped_positions.items():
+                    if abs(pos - group_pos) < pos_threshold:
+                        feats.append(feat)
+                        found_group = True
+                        break
                 
-                # 调整布局
-                plt.tight_layout()
-                
-                # 在Streamlit中显示图表
-                st.pyplot(fig)
-                
-                # 使用SHAP的内置可视化 - 力图
-                shap.initjs()  # 初始化JavaScript可视化
-                
-                # 创建SHAP力图
-                plt.figure(figsize=(14, 4))
-                force_plot = shap.force_plot(
-                    base_value=explainer.expected_value, 
-                    shap_values=shap_values,
-                    features=df.iloc[0],
-                    feature_names=feature_names,
-                    matplotlib=True,
-                    show=False
-                )
-                
-                # 保存为图像以在Streamlit中显示
-                plt.tight_layout()
-                
-                st.markdown("### SHAP Force Plot")
-                st.markdown("This visualization shows how each feature pushes the prediction from the base value towards the final prediction.")
-                st.pyplot(plt.gcf())
-                
-                # 可视化特征重要性的摘要图
-                plt.figure(figsize=(10, 7))
-                shap.summary_plot(
-                    shap_values=shap_values,
-                    features=df,
-                    feature_names=feature_names,
-                    show=False
-                )
-                plt.tight_layout()
-                
-                st.markdown("### SHAP Feature Importance")
-                st.markdown("This visualization shows the overall importance of each feature across all predictions.")
-                st.pyplot(plt.gcf())
-                
-                # 显示特征贡献表格
-                st.subheader("Feature Contributions")
-                
-                # 为所有特征创建表格数据
-                feature_contrib = pd.DataFrame({
-                    'Feature': [f"{f}" for f in feature_names],
-                    'Value': [display_data[f] if f in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", 
-                                                  "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"] 
-                           else round(df[f].values[0], 2) for f in feature_names],
-                    'Impact': shap_values,
-                    'Direction': ['Increases fever risk' if v > 0 else 'Decreases fever risk' for v in shap_values]
-                }).sort_values('Impact', key=abs, ascending=False)
-                
-                st.dataframe(feature_contrib)
-                
-                # 显示前5个最有影响力的特征作为文本
-                st.subheader("Key Factors")
-                st.markdown("The most important factors affecting this prediction:")
-                
-                # 获取前5个特征
-                for i, (_, row) in enumerate(top_features.head(5).iterrows()):
-                    direction = "increases" if row['SHAP_Value'] > 0 else "decreases"
-                    impact = abs(row['SHAP_Value'])
-                    feature = row['Feature']
-                    display_value = row['Display_Value']
+                # 如果不靠近任何分组，创建新分组
+                if not found_group:
+                    grouped_positions[pos] = [feat]
+            
+            # 显示分组中的标签
+            for group_pos, feats in grouped_positions.items():
+                if len(feats) == 1:
+                    # 单个特征，正常显示
+                    feat = feats[0]
+                    impact = next(i for f, i, v in feature_impacts if f == feat)
+                    color = '#ff0051' if impact > 0 else '#008bfb'
                     
-                    if isinstance(display_value, (int, float)):
-                        display_value = f"{display_value:.2f}"
-                    
-                    if i == 0:
-                        # 强调最重要的特征
-                        st.markdown(f"- **{feature} = {display_value}**: <span style='color:{'red' if row['SHAP_Value'] > 0 else 'blue'};font-weight:bold;'>{direction} fever risk the most (impact: {impact:.4f})</span>", unsafe_allow_html=True)
+                    # 获取标签文本
+                    if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                        orig_val = display_data[feat]
+                        display_feat = f"{feat}_{orig_val}"
                     else:
-                        st.markdown(f"- **{feature} = {display_value}**: {direction} fever risk (impact: {impact:.4f})")
+                        display_feat = feat
+                    
+                    # 添加特征名称和影响值
+                    ax.text(group_pos, -0.35, display_feat, ha='center', va='center', fontsize=10, color=color)
+                    ax.text(group_pos, -0.5, f"{impact:.2f}", ha='center', va='center', fontsize=10, color=color)
                 
-                # 添加解释性文本
-                st.markdown("""
-                <div class="shap-explanation">
-                    <h3>How to interpret these visualizations:</h3>
-                    <ul>
-                        <li><strong>Force Plot</strong>: Shows how each feature pushes the prediction away from the base value (average prediction for all patients) towards the final prediction for this specific patient.</li>
-                        <li><strong>Bar Chart</strong>: Red bars push the prediction higher (increasing fever risk), while blue bars push it lower (decreasing fever risk).</li>
-                        <li><strong>Feature Importance</strong>: Shows the distribution of feature impacts across all possible values, with color indicating the feature value (red = high, blue = low).</li>
-                    </ul>
-                    <p>These SHAP values accurately quantify each feature's contribution to the prediction, accounting for interactions between features.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            else:
-                st.error("The loaded model does not support probability predictions required for SHAP analysis.")
+                else:
+                    # 多个特征，需要水平和垂直偏移
+                    for i, feat in enumerate(feats):
+                        impact = next(i for f, i, v in feature_impacts if f == feat)
+                        color = '#ff0051' if impact > 0 else '#008bfb'
+                        
+                        # 获取标签文本
+                        if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                            orig_val = display_data[feat]
+                            display_feat = f"{feat}_{orig_val}"
+                        else:
+                            display_feat = feat
+                        
+                        # 计算水平偏移
+                        offset = (i - (len(feats) - 1) / 2) * 1.2
+                        
+                        # 对多特征分组使用交错式垂直布局
+                        if len(feats) > 3:
+                            vert_offset = -0.35 + (i % 2) * -0.25  # 垂直交错
+                            value_offset = vert_offset - 0.15  # 数值显示在名称下方
+                        else:
+                            vert_offset = -0.35
+                            value_offset = -0.5
+                        
+                        # 添加特征名称和影响值
+                        ax.text(group_pos + offset, vert_offset, display_feat, ha='center', va='center', fontsize=10, color=color)
+                        ax.text(group_pos + offset, value_offset, f"{impact:.2f}", ha='center', va='center', fontsize=10, color=color)
+            
+            # 移除y轴刻度和边框
+            ax.set_yticks([])
+            for spine in ['top', 'right', 'left']:
+                ax.spines[spine].set_visible(False)
+            
+            # 添加标题
+            ax.set_title(f"Features pushing prediction from base value ({base_value:.2f}) to {prediction:.2f}", fontsize=14)
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # 解释
+            st.subheader("How to interpret this visualization")
+            st.markdown("""
+            - **Red bars** push the prediction **higher** (increase fever risk)
+            - **Blue bars** push the prediction **lower** (decrease fever risk)
+            - The prediction starts at the base value (0.5) and each feature contributes to moving it toward the final prediction
+            - The wider the bar, the stronger the impact of that feature
+            """)
+            
+            # 显示前5个最有影响力的特征
+            st.subheader("Top Feature Impacts")
+            st.markdown("Key factors affecting this prediction:")
+            
+            # 按影响力绝对值排序
+            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
+            
+            for feat, impact, val in sorted_features[:5]:
+                direction = "increases" if impact > 0 else "decreases"
+                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    orig_val = display_data[feat]
+                    st.markdown(f"- **{feat} = {orig_val}**: {direction} fever risk (impact: {impact:.4f})")
+                else:
+                    st.markdown(f"- **{feat} = {val:.2f}**: {direction} fever risk (impact: {impact:.4f})")
                 
         except Exception as e:
-            st.warning(f"Could not generate SHAP visualizations: {str(e)}")
+            st.warning(f"Could not generate feature impact visualization: {str(e)}")
             
             # 简单的备用可视化
             try:
@@ -372,12 +452,12 @@ if st.button("Predict Fever Risk", use_container_width=True):
                 coeffs = model.coef_[0]
                 feature_names = df.columns.tolist()
                 
-                # 创建简单的条形图
+                # 创建简单条形图
                 plt.figure(figsize=(10, 6))
-                colors = ['#ff0051' if c > 0 else '#008bfb' for c in coeffs]  # 使用SHAP颜色
+                colors = ['#ff0051' if c > 0 else '#008bfb' for c in coeffs]
                 plt.barh(feature_names, np.abs(coeffs), color=colors)
                 plt.xlabel('Absolute Coefficient Value')
-                plt.title('Feature Impact on Fever Risk')
+                plt.title('Feature Importance for Fever Risk')
                 plt.tight_layout()
                 st.pyplot(plt)
             except:
