@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 11:44:52 2025
+Created on Tue May 13 12:20:40 2025
 
 @author: LENOVO
 """
@@ -13,7 +13,6 @@ Created on Tue May 13 09:00:02 2025
 """
 
 # app.py
-# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -24,6 +23,7 @@ from sklearn.linear_model import LogisticRegression
 import os
 
 # ——— Page configuration ———
+# 这必须是第一个Streamlit命令
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
@@ -183,16 +183,13 @@ if st.button("Predict Fever Risk", use_container_width=True):
             st.markdown("## Feature Impact Analysis")
             st.info("Red features increase fever risk; blue features decrease risk.")
             
-            # Create SHAP explainer using the model
+            # 创建SHAP解释器
             explainer = shap.LinearExplainer(model, df)
             
-            # Calculate SHAP values for the input
+            # 计算SHAP值
             shap_values = explainer.shap_values(df)
             
-            # Generate force plot
-            st.subheader("SHAP Force Plot")
-            
-            # Convert to matplotlib figure for Streamlit compatibility
+            # 生成力图
             plt.figure(figsize=(12, 3))
             shap.force_plot(
                 explainer.expected_value, 
@@ -200,60 +197,32 @@ if st.button("Predict Fever Risk", use_container_width=True):
                 df.iloc[0],
                 matplotlib=True,
                 show=False,
-                figsize=(12, 3),
-                text_rotation=45  # Rotate feature names for better readability
+                figsize=(12, 3)
             )
-            plt.title("Feature Contributions to Prediction")
             plt.tight_layout()
             st.pyplot(plt)
             
-            # Add text explanation of top features
-            st.subheader("Top Feature Impacts")
-            
-            # Get absolute SHAP values to identify top features
-            abs_shap_values = np.abs(shap_values[0])
-            feature_importance = pd.DataFrame({
-                'Feature': df.columns.tolist(),
-                'Importance': abs_shap_values
-            }).sort_values('Importance', ascending=False)
-            
-            top_features = feature_importance.head(5)['Feature'].tolist()
-            
-            st.markdown("### Key factors affecting prediction:")
-            for feature in top_features:
-                idx = df.columns.get_loc(feature)
-                shap_val = shap_values[0][idx]
-                direction = "increases" if shap_val > 0 else "decreases"
-                value = df.iloc[0][feature]
-                
-                if feature in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
-                    # Handle categorical features differently
-                    orig_value = input_data[feature]  # Get original value before encoding
-                    st.markdown(f"- **{feature}** ({orig_value}): {direction} fever risk (SHAP value: {shap_val:.4f})")
-                else:
-                    st.markdown(f"- **{feature}** = {value}: {direction} fever risk (SHAP value: {shap_val:.4f})")
-            
         except Exception as e:
-            st.warning(f"Could not generate SHAP visualization: {str(e)}")
+            st.warning(f"无法生成SHAP可视化: {str(e)}")
             
-            # Simple fallback visualization without SHAP
+            # 简单的后备可视化
             try:
-                st.subheader("Feature Importance (Basic Visualization)")
+                st.subheader("特征重要性 (基本可视化)")
                 
-                # Use model coefficients for feature importance
+                # 使用模型系数作为特征重要性
                 coeffs = model.coef_[0]
                 feature_names = df.columns.tolist()
                 
-                # Create simple bar chart
+                # 创建简单的条形图
                 plt.figure(figsize=(10, 6))
                 colors = ['red' if c > 0 else 'blue' for c in coeffs]
                 plt.barh(feature_names, np.abs(coeffs), color=colors)
-                plt.xlabel('Absolute Coefficient Value')
-                plt.title('Feature Impact on Fever Risk')
+                plt.xlabel('系数绝对值')
+                plt.title('特征对发热风险的影响')
                 plt.tight_layout()
                 st.pyplot(plt)
             except:
-                st.error("Could not generate feature importance visualization.")
+                st.error("无法生成特征重要性可视化。")
 
 # ——— Footer ———
 st.markdown("""
