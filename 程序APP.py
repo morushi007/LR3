@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 10:18:25 2025
+Created on Tue May 13 10:29:23 2025
 
 @author: LENOVO
 """
 
-# app.py
 # -*- coding: utf-8 -*-
+"""
+Created on Tue May 13 10:18:25 2025
+@author: LENOVO
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,6 +19,7 @@ import joblib
 import shap
 from sklearn.linear_model import LogisticRegression
 import os
+from matplotlib.patches import Rectangle
 
 # ——— Page configuration ———
 st.set_page_config(
@@ -91,12 +96,7 @@ feature_ranges = {
     "Diabetes_mellitus": {"type": "categorical", "options": ["No", "Yes"], "default": "No", "description": "Diabetes Mellitus"},
     "UrineLeuk_bin": {"type": "categorical", "options": ["=0", ">0"], "default": "=0", "description": "Urine Leukocytes"},
     "Channel_size": {"type": "categorical", "options": ["18F", "20F"], "default": "18F", "description": "Channel Size"},
-    "degree_of_hydronephrosis": {
-        "type": "categorical",
-        "options": ["None", "Mild", "Moderate", "Severe"],
-        "default": "None",
-        "description": "Degree of Hydronephrosis"
-    },
+    "degree_of_hydronephrosis": {"type": "categorical", "options": ["None", "Mild", "Moderate", "Severe"], "default": "None", "description": "Degree of Hydronephrosis"},
     "MayoScore_bin": {"type": "categorical", "options": ["<3", "≥3"], "default": "<3", "description": "Mayo Score"}
 }
 
@@ -110,8 +110,7 @@ for idx, (feat, cfg) in enumerate(feature_ranges.items()):
         if cfg["type"] == "numerical":
             input_data[feat] = st.number_input(
                 label=f"{cfg['description']} ({feat})",
-                min_value=cfg["min"],
-                max_value=cfg["max"],
+                min_value=cfg["min"], max_value=cfg["max"],
                 value=cfg["default"],
                 help=f"Allowed range: {cfg['min']} to {cfg['max']}"
             )
@@ -127,17 +126,15 @@ if st.button("Predict Fever Risk", use_container_width=True):
     model = load_model()
     if model:
         df = pd.DataFrame([input_data])
-        # Encode categorical features
+        # encode categoricals
         df["Sex"] = df["Sex"].map({"Male": 1, "Female": 0})
         df["Diabetes_mellitus"] = df["Diabetes_mellitus"].map({"Yes": 1, "No": 0})
         df["UrineLeuk_bin"] = df["UrineLeuk_bin"].map({">0": 1, "=0": 0})
         df["Channel_size"] = df["Channel_size"].map({"18F": 1, "20F": 0})
-        df["degree_of_hydronephrosis"] = df["degree_of_hydronephrosis"].map({
-            "None": 0, "Mild": 1, "Moderate": 2, "Severe": 3
-        })
+        df["degree_of_hydronephrosis"] = df["degree_of_hydronephrosis"].map({"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3})
         df["MayoScore_bin"] = df["MayoScore_bin"].map({"≥3": 1, "<3": 0})
 
-        # Predict probability
+        # predict
         proba = model.predict_proba(df)[0][1] * 100
         if proba < 25:
             level, color = "Low Risk", "green"
@@ -148,7 +145,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
         else:
             level, color = "High Risk", "red"
 
-        # Display results
+        # display main results
         st.markdown("## Prediction Results")
         c1, c2 = st.columns([2, 1])
         with c1:
@@ -162,151 +159,94 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ### Interpretation
             - Predicted fever probability: **{proba:.2f}%**  
             - Risk level: **{level}**  
-
+            
             **Note**: For academic reference only; not a substitute for clinical judgment.
             """)
+
         with c2:
             fig, ax = plt.subplots(figsize=(4, 4))
             ax.pie([proba, 100 - proba], labels=["Fever", "No Fever"], autopct="%1.1f%%", startangle=90)
             ax.axis("equal")
             st.pyplot(fig)
 
-        # ——— SHAP Force Plot visualization ———
+        # ——— Improved SHAP-style Force Plot ———
         try:
             st.markdown("## Feature Impact Analysis")
-            
-            # Calculate predicted probability and get model information
-            prediction_score = model.predict_proba(df)[0][1]
-            base_value = 0.5  # Base value (average prediction)
-            
-            # Get coefficients and their contributions
+            # prepare data
             coeffs = model.coef_[0]
             feature_names = df.columns.tolist()
             feature_values = df.iloc[0].values
-            
-            # Calculate impacts - for logistic regression, use coefficients * values
             impacts = coeffs * feature_values
-            
-            # Create SHAP-style force plot
+            feat_imp = list(zip(feature_names, impacts, feature_values))
+            # sort by absolute impact and take top 6
+            top_feats = sorted(feat_imp, key=lambda x: abs(x[1]), reverse=True)[:6]
+            # normalization factor
+            max_imp = max(abs(i) for _, i, _ in feat_imp)
+            norm = 9 / max_imp if max_imp > 0 else 1
+
+            # draw
             fig, ax = plt.subplots(figsize=(10, 2.5))
-            
-            # Set up the plot area
-            ax.set_xlim(-10, 10)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_visible(False)
-            
-            # Add vertical center line
-            ax.axvline(x=0, color='#999999', linestyle='-')
-            
-            # Add title
-            ax.set_title(f"Based on feature values, predicted possibility of fever is {proba:.2f}%", fontsize=14)
-            
-            # Standardize and sort feature impacts
-            feature_impacts = list(zip(feature_names, impacts, feature_values))
-            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
-            
-            # Select top features for display
-            top_features = sorted_features[:6]  # Limit to prevent overcrowding
-            
-            # Calculate scale factor for normalization
-            max_abs_impact = max([abs(imp) for _, imp, _ in sorted_features])
-            norm_factor = 9 / max_abs_impact if max_abs_impact > 0 else 1
-            
-            # Separate positive and negative impacts
-            pos_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i > 0]
-            neg_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i < 0]
-            
-            # Create force plot visualization with SHAP colors
-            # Create main red area (positive impacts)
-            pos_width = sum(abs(i) for _, i, _ in pos_impacts) 
-            if pos_width > 0:
-                rect_red = plt.Rectangle((-pos_width, 0.1), pos_width, 0.8, color='#ff0051', alpha=0.7)
-                ax.add_patch(rect_red)
-            
-            # Create blue area (negative impacts)
-            neg_width = sum(abs(i) for _, i, _ in neg_impacts)
-            if neg_width > 0:
-                rect_blue = plt.Rectangle((0, 0.1), neg_width, 0.8, color='#008bfb', alpha=0.7)
-                ax.add_patch(rect_blue)
-            
-            # Add feature labels
-            # Calculate positions for feature labels
-            all_display_features = pos_impacts + neg_impacts
-            # Sort features by absolute impact for consistent display
-            all_display_features = sorted(all_display_features, key=lambda x: abs(x[1]), reverse=True)
-            
-            # Calculate label positions to spread evenly
-            label_positions = np.linspace(-8, 8, len(all_display_features) + 2)[1:-1]
-            
-            # Display feature labels
-            for i, (feat, impact, val) in enumerate(all_display_features):
-                # Format label based on feature type
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    orig_val = input_data[feat]
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
-                else:
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
-            
-            # Add base value and prediction value indicators
-            ax.text(0, 1.3, f"base value\n{base_value:.2f}", ha='center', fontsize=10)
-            
-            # Add higher/lower indicators
-            ax.text(8, 1.3, "higher", ha='center', color='#ff0051', fontsize=10)
-            ax.text(-8, 1.3, "lower", ha='center', color='#008bfb', fontsize=10)
-            
-            # Add prediction score on the right
-            norm_prediction = (prediction_score - base_value) * 10
-            ax.text(norm_prediction, 1.3, f"{prediction_score:.2f}", ha='center', fontsize=10)
-            
-            # Remove y-axis ticks and labels
             ax.set_yticks([])
-            ax.set_yticklabels([])
-            
+            ax.axvline(0, color='#999999', linestyle='-')
+            ax.set_title(f"Based on feature values, predicted fever risk is {proba:.2f}%", fontsize=14)
+
+            neg_cum, pos_cum = 0, 0
+            categoricals = {"Sex","Diabetes_mellitus","UrineLeuk_bin","Channel_size","degree_of_hydronephrosis","MayoScore_bin"}
+
+            for feat, raw_imp, val in top_feats:
+                imp = raw_imp * norm
+                color = '#ff0051' if imp > 0 else '#008bfb'
+                if imp > 0:
+                    start, width = pos_cum, imp
+                    pos_cum += width
+                else:
+                    width = abs(imp)
+                    start = -neg_cum - width
+                    neg_cum += width
+
+                ax.add_patch(Rectangle((start, 0.1), width, 0.8, color=color, alpha=0.7))
+
+                # label
+                lbl = input_data[feat] if feat in categoricals else f"{val:.2f}"
+                ax.text(start + width/2, -0.2, f"{feat}\n{lbl}", ha='center', va='top', fontsize=9)
+
+            # adjust limits and add higher/lower
+            span = max(pos_cum, neg_cum) * 1.1
+            ax.set_xlim(-span, span)
+            ax.text(-span, 1.3, "lower", ha='left', color='#008bfb', fontsize=10)
+            ax.text(span, 1.3, "higher", ha='right', color='#ff0051', fontsize=10)
+            # show final prediction offset
+            base = 0.5
+            final_pos = (model.predict_proba(df)[0][1] - base) * norm
+            ax.text(final_pos, 1.3, f"{model.predict_proba(df)[0][1]:.2f}", ha='center', fontsize=10)
+
             plt.tight_layout()
             st.pyplot(fig)
-            
-            # Add explanation text
-            st.subheader("Feature Impact Explanation")
-            st.markdown("""
-            ### How to interpret the visualization:
-            - Red features increase the probability of fever
-            - Blue features decrease the probability of fever
-            - The longer the bar, the stronger the impact
-            """)
-            
-            # Display feature contributions as a table
-            st.subheader("All Feature Contributions")
-            feature_contrib = pd.DataFrame({
+
+            st.subheader("Feature Contribution Table")
+            contrib_df = pd.DataFrame({
                 'Feature': feature_names,
                 'Value': feature_values,
                 'Impact': impacts,
-                'Direction': ['Increases fever risk' if i > 0 else 'Decreases fever risk' for i in impacts]
+                'Direction': ['↑ fever risk' if i>0 else '↓ fever risk' for i in impacts]
             }).sort_values('Impact', key=abs, ascending=False)
-            
-            st.dataframe(feature_contrib)
-            
+            st.dataframe(contrib_df)
+
         except Exception as e:
-            st.warning(f"Could not generate feature impact visualization: {str(e)}")
-            
-            # Simple fallback visualization 
-            try:
-                st.subheader("Feature Importance (Basic Visualization)")
-                
-                # Use model coefficients for feature importance
-                coeffs = model.coef_[0]
-                feature_names = df.columns.tolist()
-                
-                # Create simple bar chart
-                plt.figure(figsize=(10, 6))
-                colors = ['#ff0051' if c > 0 else '#008bfb' for c in coeffs]  # Using SHAP colors
-                plt.barh(feature_names, np.abs(coeffs), color=colors)
-                plt.xlabel('Absolute Coefficient Value')
-                plt.title('Feature Impact on Fever Risk')
-                plt.tight_layout()
-                st.pyplot(plt)
-            except:
-                st.error("Could not generate feature importance visualization.")
+            st.warning(f"Could not generate enhanced force plot: {e}")
+
+            # fallback simple importance bar chart
+            st.subheader("Feature Importance (Fallback)")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            cols = ['#ff0051' if c>0 else '#008bfb' for c in coeffs]
+            ax.barh(feature_names, np.abs(coeffs), color=cols)
+            ax.set_xlabel('Absolute Coefficient Value')
+            ax.set_title('Feature Impact on Fever Risk')
+            plt.tight_layout()
+            st.pyplot(fig)
 
 # ——— Footer ———
 st.markdown("""
