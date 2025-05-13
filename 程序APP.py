@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 10:37:52 2025
+Created on Tue May 13 10:53:29 2025
 
 @author: LENOVO
 """
@@ -171,7 +171,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.axis("equal")
             st.pyplot(fig)
 
-        # ——— SHAP Force Plot visualization ———
+        # ——— SHAP Force Plot visualization based on original SHAP code ———
         try:
             st.markdown("## Feature Impact Analysis")
             
@@ -184,100 +184,156 @@ if st.button("Predict Fever Risk", use_container_width=True):
             feature_names = df.columns.tolist()
             feature_values = df.iloc[0].values
             
-            # Calculate impacts - for logistic regression, use coefficients * values
+            # Calculate impacts (equivalent to SHAP values for linear models)
             impacts = coeffs * feature_values
             
-            # Create SHAP-style force plot
-            fig, ax = plt.subplots(figsize=(10, 2.5))
+            # Create figure with proper dimensions
+            fig, ax = plt.subplots(figsize=(12, 3))
             
-            # Set up the plot area
-            ax.set_xlim(-10, 10)
+            # Set up the plot area exactly like SHAP
+            ax.set_xlim(-10, 5)
+            
+            # Remove all spines except bottom
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_visible(False)
+            ax.spines['bottom'].set_visible(True)
             
-            # Add vertical center line
-            ax.axvline(x=0, color='#999999', linestyle='-')
+            # Add horizontal line for x-axis
+            ax.axhline(y=0, color='black', linewidth=0.5, alpha=0.5)
             
-            # Add title
-            ax.set_title(f"Based on feature values, predicted possibility of fever is {proba:.2f}%", fontsize=14)
+            # Style axis ticks exactly like SHAP
+            ax.tick_params(axis='x', direction='out', color='black', length=3)
+            ax.set_xticks(range(-10, 6, 2))
             
-            # Standardize and sort feature impacts
-            feature_impacts = list(zip(feature_names, impacts, feature_values))
-            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
+            # This is the main title (placed below in original SHAP)
+            title = f"Based on feature values, predicted possibility of fever is {proba:.2f}%"
             
-            # Select top features for display
-            top_features = sorted_features[:8]  # Limit to prevent overcrowding
+            # 1. Create the background pink and blue areas like SHAP
+            # First determine the extent of red and blue areas based on impacts
+            total_pos_impact = sum(i for i in impacts if i > 0)
+            total_neg_impact = sum(i for i in impacts if i < 0)
             
-            # Calculate scale factor for normalization
-            max_abs_impact = max([abs(imp) for _, imp, _ in sorted_features])
-            norm_factor = 9 / max_abs_impact if max_abs_impact > 0 else 1
+            # Scale factor to match SHAP's scale
+            scale_factor = 8 / max(abs(total_pos_impact), abs(total_neg_impact))
             
-            # Separate positive and negative impacts
-            pos_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i > 0]
-            neg_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i < 0]
+            # Create red (positive) background area
+            red_width = total_pos_impact * scale_factor
+            blue_width = abs(total_neg_impact) * scale_factor
             
-            # Create individual segments for each feature (similar to original SHAP force plot)
-            # Define lighter red and blue colors for variety
-            pos_colors = ['#ff0051', '#ff3373', '#ff6699']  # Various shades of red
-            neg_colors = ['#008bfb', '#33a0ff', '#66b5ff']  # Various shades of blue
+            # Add colored backgrounds
+            rect_pink = plt.Rectangle((-10, 0.05), 10+red_width, 0.9, color='#ffb6c1', alpha=0.3, ec=None)
+            ax.add_patch(rect_pink)
             
-            # Draw positive impact segments (left to right)
-            pos_x = 0
-            for i, (feat, impact, val) in enumerate(pos_impacts):
-                # Select color (cycle through pos_colors)
-                color = pos_colors[i % len(pos_colors)]
-                width = abs(impact)
+            # Add blue background at the end
+            rect_blue = plt.Rectangle((red_width, 0.05), 5-red_width, 0.9, color='#add8e6', alpha=0.3, ec=None)
+            ax.add_patch(rect_blue)
+            
+            # 2. Add feature areas and triangles like SHAP
+            # Sort features by absolute impact
+            sorted_features = sorted(zip(feature_names, impacts, feature_values), 
+                                    key=lambda x: abs(x[1]), reverse=True)
+            
+            # Filter to top features only
+            top_features = sorted_features[:8]
+            
+            # Normalize impacts to fit the visualization scale
+            normalized_impacts = []
+            current_pos_x = 0
+            current_neg_x = -blue_width
+            
+            # Prepare positive and negative impacts
+            pos_impacts = []
+            neg_impacts = []
+            
+            for feat, impact, val in top_features:
+                norm_impact = impact * scale_factor
+                if norm_impact > 0:
+                    pos_impacts.append((feat, norm_impact, val, current_pos_x))
+                    current_pos_x += norm_impact
+                else:
+                    neg_impacts.append((feat, norm_impact, val, current_neg_x))
+                    current_neg_x += abs(norm_impact)
+            
+            # Now draw the features
+            # First the positive/red features
+            for feat, impact, val, start_x in pos_impacts:
+                # Draw triangle marker at the beginning of each segment
+                ax.plot(start_x, 0.1, marker='>',  color='#ff007c', markersize=6)
                 
-                # Draw rectangle for this feature
-                rect = plt.Rectangle((pos_x, 0.1), width, 0.8, color=color, alpha=0.7)
-                ax.add_patch(rect)
-                
-                # Add feature value at bottom
+                # Format the feature name and value
+                display_name = feat
+                # Handle categorical features
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
                     orig_val = input_data[feat]
-                    ax.text(pos_x + width/2, -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                    # Map to display format from reference image
+                    if feat == "Sex" and orig_val == "Male":
+                        display_name = "Sex_2"
+                    elif feat == "Diabetes_mellitus" and orig_val == "Yes":
+                        display_name = "Diabetes mellitus_1"
+                    elif feat == "UrineLeuk_bin" and orig_val == ">0":
+                        display_name = "UrineLeuk_bin_>0"
+                    elif feat == "MayoScore_bin" and orig_val == "≥3":
+                        display_name = "MayoScore_bin_≥3"
+                    val_display = orig_val
                 else:
-                    ax.text(pos_x + width/2, -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                    val_display = f"{val:.2f}"
                 
-                pos_x += width
+                # Add feature label and value
+                ax.text(start_x + impact/2, -0.15, f"{display_name}\n{val_display}", 
+                       ha='center', va='top', fontsize=9, color='#ff007c')
             
-            # Draw negative impact segments (right to left)
-            neg_x = 0
-            for i, (feat, impact, val) in enumerate(neg_impacts):
-                # Select color (cycle through neg_colors)
-                color = neg_colors[i % len(neg_colors)]
-                width = abs(impact)
+            # Then the negative/blue features
+            for feat, impact, val, start_x in neg_impacts:
+                # Draw triangle marker
+                ax.plot(start_x, 0.1, marker='<', color='#0066ff', markersize=6)
                 
-                # Draw rectangle for this feature
-                rect = plt.Rectangle((neg_x, 0.1), -width, 0.8, color=color, alpha=0.7) 
-                ax.add_patch(rect)
-                
-                # Add feature value at bottom
+                # Format the feature name and value
+                display_name = feat
+                # Handle categorical features
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
                     orig_val = input_data[feat]
-                    ax.text(neg_x - width/2, -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                    # Map to display format
+                    if feat == "LMR":
+                        display_name = "LMR"
+                    elif feat == "Preoperative_hemoglobin":
+                        display_name = "Preoperative hemoglobin"
+                    val_display = orig_val
                 else:
-                    ax.text(neg_x - width/2, -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                    val_display = f"{val:.2f}"
                 
-                neg_x -= width
+                # Add feature label and value
+                ax.text(start_x + abs(impact)/2, -0.15, f"{display_name}\n{val_display}", 
+                       ha='center', va='top', fontsize=9, color='#0066ff')
             
-            # Add base value and prediction indicators
-            ax.text(0, 1.3, f"base value\n{base_value:.2f}", ha='center', fontsize=10)
+            # 3. Add the higher/lower indicators and base value
+            # Base value at the center
+            ax.text(0, 1.5, f"base value\n{base_value:.2f}", ha='center', va='center', fontsize=9)
             
-            # Calculate normalized prediction position
-            pred_position = pos_x + neg_x
-            ax.text(pred_position, 1.3, f"{prediction_score:.2f}", ha='center', fontsize=10)
+            # Higher indicator with right arrow
+            ax.text(3, 1.5, "higher", ha='center', va='center', color='#ff007c', fontsize=9)
+            ax.annotate("", xy=(4, 1.5), xytext=(3.5, 1.5), 
+                       arrowprops=dict(arrowstyle="->", color='#ff007c', shrinkA=0, shrinkB=0, lw=1))
             
-            # Add higher/lower indicators
-            ax.text(8, 1.3, "higher", ha='center', color='#ff0051', fontsize=10)
-            ax.text(-8, 1.3, "lower", ha='center', color='#008bfb', fontsize=10)
+            # Lower indicator with left arrow
+            ax.text(-5, 1.5, "lower", ha='center', va='center', color='#0066ff', fontsize=9)
+            ax.annotate("", xy=(-6, 1.5), xytext=(-5.5, 1.5), 
+                       arrowprops=dict(arrowstyle="->", color='#0066ff', shrinkA=0, shrinkB=0, lw=1))
             
-            # Remove y-axis ticks and labels
+            # 4. Add the prediction value in a small box
+            # Create a small box for the prediction value
+            rect = plt.Rectangle((3.7, 1.3), 0.6, 0.4, ec='#bbbbbb', fc='white', alpha=0.8, lw=0.5)
+            ax.add_patch(rect)
+            ax.text(4, 1.5, f"{prediction_score:.2f}", ha='center', va='center', fontsize=9)
+            
+            # 5. Remove y-axis ticks and labels
             ax.set_yticks([])
             ax.set_yticklabels([])
             
-            plt.tight_layout()
+            # Add title under the plot
+            plt.figtext(0.5, 0.01, title, ha='center', fontsize=14)
+            
+            plt.tight_layout(rect=[0, 0.05, 1, 0.95])
             st.pyplot(fig)
             
             # Add explanation text
@@ -286,7 +342,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ### How to interpret the visualization:
             - Red features increase the probability of fever
             - Blue features decrease the probability of fever
-            - The wider the colored segment, the stronger the impact
+            - The impact of each feature shows how much it pushes the prediction away from the base value
             """)
             
             # Display feature contributions as a table
