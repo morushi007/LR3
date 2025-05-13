@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 10:33:02 2025
+Created on Tue May 13 09:00:02 2025
 
 @author: LENOVO
 """
@@ -171,125 +171,55 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.axis("equal")
             st.pyplot(fig)
 
-        # ——— SHAP Force Plot visualization ———
+        # ——— FIXED SHAP explanations section ———
         try:
             st.markdown("## Feature Impact Analysis")
+            st.info("Red bars increase fever risk; blue bars decrease risk.")
             
-            # Calculate predicted probability and get model information
-            prediction_score = model.predict_proba(df)[0][1]
-            base_value = 0.5  # Base value (average prediction)
+            # Convert feature to simpler feature importance display
+            # This avoids potential rendering issues with SHAP plots
+            feature_importance = pd.DataFrame({
+                'Feature': df.columns.tolist(),
+                'Importance': np.abs(model.coef_[0])  # Use absolute coefficient values as importance
+            }).sort_values('Importance', ascending=False)
             
-            # Get coefficients and their contributions
-            coeffs = model.coef_[0]
-            feature_names = df.columns.tolist()
-            feature_values = df.iloc[0].values
+            # Create bar chart of feature importance
+            fig, ax = plt.subplots(figsize=(10, 6))
+            bars = ax.barh(feature_importance['Feature'], feature_importance['Importance'])
             
-            # Calculate impacts - for logistic regression, use coefficients * values
-            impacts = coeffs * feature_values
-            
-            # Create SHAP-style force plot
-            fig, ax = plt.subplots(figsize=(10, 2.5))
-            
-            # Set up the plot area
-            ax.set_xlim(-10, 10)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_visible(False)
-            
-            # Add vertical center line
-            ax.axvline(x=0, color='#999999', linestyle='-')
-            
-            # Add title
-            ax.set_title(f"Based on feature values, predicted possibility of fever is {proba:.2f}%", fontsize=14)
-            
-            # Standardize and sort feature impacts
-            feature_impacts = list(zip(feature_names, impacts, feature_values))
-            sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
-            
-            # Select top features for display
-            top_features = sorted_features[:6]  # Limit to prevent overcrowding
-            
-            # Calculate scale factor for normalization
-            max_abs_impact = max([abs(imp) for _, imp, _ in sorted_features])
-            norm_factor = 9 / max_abs_impact if max_abs_impact > 0 else 1
-            
-            # Separate positive and negative impacts
-            pos_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i > 0]
-            neg_impacts = [(f, i*norm_factor, v) for f, i, v in top_features if i < 0]
-            
-            # Create force plot visualization with SHAP colors
-            # Create main red area (positive impacts)
-            pos_width = sum(abs(i) for _, i, _ in pos_impacts) 
-            if pos_width > 0:
-                rect_red = plt.Rectangle((-pos_width, 0.1), pos_width, 0.8, color='#ff0051', alpha=0.7)
-                ax.add_patch(rect_red)
-            
-            # Create blue area (negative impacts)
-            neg_width = sum(abs(i) for _, i, _ in neg_impacts)
-            if neg_width > 0:
-                rect_blue = plt.Rectangle((0, 0.1), neg_width, 0.8, color='#008bfb', alpha=0.7)
-                ax.add_patch(rect_blue)
-            
-            # Add feature labels
-            # Calculate positions for feature labels
-            all_display_features = pos_impacts + neg_impacts
-            # Sort features by absolute impact for consistent display
-            all_display_features = sorted(all_display_features, key=lambda x: abs(x[1]), reverse=True)
-            
-            # Calculate label positions to spread evenly
-            label_positions = np.linspace(-8, 8, len(all_display_features) + 2)[1:-1]
-            
-            # Display feature labels
-            for i, (feat, impact, val) in enumerate(all_display_features):
-                # Format label based on feature type
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    orig_val = input_data[feat]
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
-                else:
-                    ax.text(label_positions[i], -0.2, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
-            
-            # Add base value and prediction value indicators
-            ax.text(0, 1.3, f"base value\n{base_value:.2f}", ha='center', fontsize=10)
-            
-            # Add higher/lower indicators
-            ax.text(8, 1.3, "higher", ha='center', color='#ff0051', fontsize=10)
-            ax.text(-8, 1.3, "lower", ha='center', color='#008bfb', fontsize=10)
-            
-            # Add prediction score on the right
-            norm_prediction = (prediction_score - base_value) * 10
-            ax.text(norm_prediction, 1.3, f"{prediction_score:.2f}", ha='center', fontsize=10)
-            
-            # Remove y-axis ticks and labels
-            ax.set_yticks([])
-            ax.set_yticklabels([])
-            
+            # Add color coding based on coefficient direction
+            for i, feature in enumerate(feature_importance['Feature']):
+                idx = list(df.columns).index(feature)
+                coef = model.coef_[0][idx]
+                bars[i].set_color('red' if coef > 0 else 'blue')
+                
+            ax.set_xlabel('Feature Importance')
+            ax.set_title('Feature Impact on Fever Risk')
             plt.tight_layout()
             st.pyplot(fig)
             
-            # Add explanation text
-            st.subheader("Feature Impact Explanation")
-            st.markdown("""
-            ### How to interpret the visualization:
-            - Red features increase the probability of fever
-            - Blue features decrease the probability of fever
-            - The longer the bar, the stronger the impact
-            """)
+            # Add text explanation of top features
+            st.subheader("Top Feature Impacts")
+            top_features = feature_importance.head(5)['Feature'].tolist()
             
-            # Display feature contributions as a table
-            st.subheader("All Feature Contributions")
-            feature_contrib = pd.DataFrame({
-                'Feature': feature_names,
-                'Value': feature_values,
-                'Impact': impacts,
-                'Direction': ['Increases fever risk' if i > 0 else 'Decreases fever risk' for i in impacts]
-            }).sort_values('Impact', key=abs, ascending=False)
-            
-            st.dataframe(feature_contrib)
+            st.markdown("### Key factors affecting prediction:")
+            for feature in top_features:
+                idx = list(df.columns).index(feature)
+                coef = model.coef_[0][idx]
+                direction = "increases" if coef > 0 else "decreases"
+                value = df.iloc[0][feature]
+                
+                if feature in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
+                    # Handle categorical features differently
+                    orig_value = input_data[feature]  # Get original value before encoding
+                    st.markdown(f"- **{feature}** ({orig_value}): {direction} fever risk")
+                else:
+                    st.markdown(f"- **{feature}** = {value}: {direction} fever risk")
             
         except Exception as e:
-            st.warning(f"Could not generate feature impact visualization: {str(e)}")
+            st.warning(f"Could not generate feature importance visualization: {str(e)}")
             
-            # Simple fallback visualization 
+            # Simple fallback visualization without SHAP
             try:
                 st.subheader("Feature Importance (Basic Visualization)")
                 
@@ -299,7 +229,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
                 
                 # Create simple bar chart
                 plt.figure(figsize=(10, 6))
-                colors = ['#ff0051' if c > 0 else '#008bfb' for c in coeffs]  # Using SHAP colors
+                colors = ['red' if c > 0 else 'blue' for c in coeffs]
                 plt.barh(feature_names, np.abs(coeffs), color=colors)
                 plt.xlabel('Absolute Coefficient Value')
                 plt.title('Feature Impact on Fever Risk')
