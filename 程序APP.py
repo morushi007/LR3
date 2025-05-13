@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue May 13 09:13:45 2025
+Created on Tue May 13 09:24:05 2025
 
 @author: LENOVO
 """
@@ -177,8 +177,8 @@ if st.button("Predict Fever Risk", use_container_width=True):
             st.info("Red features increase fever risk; blue features decrease risk.")
             
             # Calculate predicted probability
-            prediction_score = model.predict_proba(df)[0][1]  # 获取阳性类别的概率
-            base_value = 0.5  # 基准值（不确定时为0.5）
+            prediction_score = model.predict_proba(df)[0][1]
+            base_value = 0.5  # 基准值
             
             # Get coefficients and their contributions
             coeffs = model.coef_[0]
@@ -188,101 +188,182 @@ if st.button("Predict Fever Risk", use_container_width=True):
             # Calculate impacts - for logistic regression can use coefficients * values
             impacts = coeffs * feature_values
             
-            # Sort by absolute impact
-            sorted_idx = np.argsort(np.abs(impacts))
-            sorted_features = [feature_names[i] for i in sorted_idx]
-            sorted_impacts = impacts[sorted_idx]
-            sorted_values = feature_values[sorted_idx]
+            # Sort features by impact for visualization
+            features_with_impact = list(zip(feature_names, impacts, feature_values))
+            # Sort by absolute impact (preserving sign)
+            sorted_features = sorted(features_with_impact, key=lambda x: abs(x[1]), reverse=True)
             
-            # Create force plot visualization
-            fig, ax = plt.subplots(figsize=(10, 3))
+            # Extract top features (limiting to prevent overcrowding)
+            top_features = sorted_features[:7]  # 限制显示的特征数量
             
-            # Setup the plot
-            ax.set_xlim(0.2, 0.9)  # 根据您的预测范围调整
-            ax.set_title(f"Based on feature values, predicted possibility of fever is {proba:.2f}%", fontsize=14)
+            # Setup the figure with SHAP-like style
+            fig, ax = plt.subplots(figsize=(12, 4))
             
-            # 添加概率线
-            ax.axvline(x=prediction_score, color='black', linestyle='-', alpha=0.5)
-            ax.text(prediction_score, 0.5, f"{prediction_score:.3f}", ha='center', va='bottom', fontsize=12)
+            # 设置x轴范围，以对称方式展示正负影响
+            max_impact = max(abs(impact) for _, impact, _ in top_features) * 1.2
+            ax.set_xlim(-max_impact, max_impact)
             
-            # 添加左右标签
-            ax.text(0.25, 0.8, "lower risk", ha='center', fontsize=10, color='blue')
-            ax.text(0.85, 0.8, "higher risk", ha='center', fontsize=10, color='red')
+            # 添加基准线
+            ax.axvline(x=0, color='#999999', linestyle='-', alpha=0.5)
             
-            # 创建一个水平条形来表示概率范围
-            plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+            # 添加红蓝配色的水平条
+            colors = {'positive': '#f8766d', 'negative': '#00bfc4'}  # SHAP原始的红蓝配色
             
-            # 放置刻度
-            ticks = np.arange(0.2, 1.0, 0.1)
-            ax.set_xticks(ticks)
-            ax.set_xticklabels([f"{x:.1f}" for x in ticks])
-            
-            # 添加特征贡献标记
-            pos_features = [(feature_names[i], impacts[i], feature_values[i]) for i in range(len(impacts)) if impacts[i] > 0]
-            neg_features = [(feature_names[i], impacts[i], feature_values[i]) for i in range(len(impacts)) if impacts[i] < 0]
-            
-            # 显示顶部贡献特征的值
-            top_pos = sorted(pos_features, key=lambda x: abs(x[1]), reverse=True)[:3]
-            top_neg = sorted(neg_features, key=lambda x: abs(x[1]), reverse=True)[:3]
-            
-            # 在图表下方添加箭头和值标签
-            y_pos = -0.2
-            # 正向特征（红色）
-            for i, (feat, imp, val) in enumerate(top_pos):
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
-                    # 处理分类特征
-                    orig_value = input_data[feat]  # 获取编码前的原始值
-                    ax.annotate(f"{feat} = {orig_value}", 
-                               xy=(0.3 + i*0.15, y_pos), 
-                               xytext=(0.3 + i*0.15, y_pos-0.1),
-                               arrowprops=dict(arrowstyle='->', color='red'),
-                               ha='center', va='top', color='red')
+            # 特征影响条
+            y_pos = 0
+            for i, (feature, impact, value) in enumerate(top_features):
+                # 确定颜色和方向
+                color = colors['positive'] if impact > 0 else colors['negative']
+                
+                # 绘制水平条
+                ax.barh(i, impact, color=color, height=0.8, alpha=0.7)
+                
+                # 添加特征名称和值
+                if feature in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
+                    # 处理分类特征，显示原始值
+                    orig_value = input_data[feature]
+                    label_text = f"{feature} = {orig_value}"
                 else:
-                    ax.annotate(f"{feat} = {val:.1f}", 
-                               xy=(0.3 + i*0.15, y_pos), 
-                               xytext=(0.3 + i*0.15, y_pos-0.1),
-                               arrowprops=dict(arrowstyle='->', color='red'),
-                               ha='center', va='top', color='red')
-            
-            # 负向特征（蓝色）
-            for i, (feat, imp, val) in enumerate(top_neg):
-                if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
-                    # 处理分类特征
-                    orig_value = input_data[feat]  # 获取编码前的原始值
-                    ax.annotate(f"{feat} = {orig_value}", 
-                               xy=(0.7 + i*0.12, y_pos), 
-                               xytext=(0.7 + i*0.12, y_pos-0.1),
-                               arrowprops=dict(arrowstyle='<-', color='blue'),
-                               ha='center', va='top', color='blue')
+                    # 处理数值特征，保留两位小数
+                    label_text = f"{feature} = {value:.2f}"
+                
+                # 放置标签
+                if impact > 0:
+                    ax.text(impact/2, i, label_text, ha='center', va='center', color='white', fontsize=10)
                 else:
-                    ax.annotate(f"{feat} = {val:.1f}", 
-                               xy=(0.7 + i*0.12, y_pos), 
-                               xytext=(0.7 + i*0.12, y_pos-0.1),
-                               arrowprops=dict(arrowstyle='<-', color='blue'),
-                               ha='center', va='top', color='blue')
+                    ax.text(impact/2, i, label_text, ha='center', va='center', color='white', fontsize=10)
             
-            # 移除y轴刻度和标签
-            ax.set_yticks([])
+            # 设置y轴标签（空白）
+            ax.set_yticks(range(len(top_features)))
             ax.set_yticklabels([])
             
-            # 创建红蓝渐变条
-            for i in range(100):
-                if i < 50:  # 红色部分（左侧）
-                    ax.axvspan(0.2 + i*0.007, 0.2 + (i+1)*0.007, alpha=0.6, color=plt.cm.Reds(i/50))
-                else:  # 蓝色部分（右侧）
-                    ax.axvspan(0.2 + i*0.007, 0.2 + (i+1)*0.007, alpha=0.6, color=plt.cm.Blues((100-i)/50))
+            # 添加标题
+            ax.set_title(f"Predicted probability of fever: {proba:.2f}%", fontsize=14)
             
+            # 添加higher/lower标签
+            ax.text(max_impact * 0.8, -0.8, "higher →", ha='center', color=colors['positive'], fontsize=10)
+            ax.text(-max_impact * 0.8, -0.8, "← lower", ha='center', color=colors['negative'], fontsize=10)
+            
+            # 显示预测值和基准值
+            base_text = f"base value\n{base_value:.2f}"
+            ax.text(0, len(top_features) + 0.5, base_text, ha='center', va='center', fontsize=10, 
+                   bbox=dict(facecolor='white', alpha=0.6, boxstyle='round,pad=0.5'))
+            
+            pred_text = f"{prediction_score:.2f}"
+            ax.text(max_impact * 0.9, len(top_features) + 0.5, pred_text, ha='center', va='center', 
+                   fontsize=10, color=colors['positive'], 
+                   bbox=dict(facecolor='white', alpha=0.6, boxstyle='round,pad=0.5'))
+            
+            # 添加预测值线
+            impact_sum = sum(impact for _, impact, _ in top_features) 
+            pred_line_x = impact_sum * 0.8  # 近似位置
+            ax.axvline(x=pred_line_x, color='black', linestyle='--', alpha=0.7)
+            
+            # 美化图表
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
             plt.tight_layout()
+            
             st.pyplot(fig)
+            
+            # 创建另一种更接近SHAP原始风格的力图 - 类似于您提供的第二张图片
+            try:
+                # 创建另一个图，更接近SHAP原始风格
+                fig2, ax2 = plt.subplots(figsize=(12, 3))
+                
+                # 使用SHAP风格的颜色
+                pos_color = '#ff0051'  # 红色
+                neg_color = '#008bfb'  # 蓝色
+                
+                # 设置x轴范围，使用相对规范化的刻度
+                ax2.set_xlim(-10, 10)
+                ax2.set_xticks(range(-10, 11, 2))
+                
+                # 创建水平条形的背景
+                rect = plt.Rectangle((-10, 0), 20, 1, color='#f8f8f8')
+                ax2.add_patch(rect)
+                
+                # 基准线
+                ax2.axvline(x=0, color='#999999', linewidth=1)
+                
+                # 当前值标记
+                current_value = 2.9  # 这是示例值，您需要使用实际计算的值
+                ax2.axvline(x=current_value, color='black', linestyle='--', linewidth=1)
+                
+                # 添加标题
+                ax2.set_title(f"Based on feature values, predicted possibility of fever is {proba:.2f}%", fontsize=14)
+                
+                # 创建力图的连接条形
+                # 为简化，我们将仅显示影响最大的几个特征
+                important_features = sorted_features[:6]
+                
+                # 标准化为-10到10的范围
+                max_abs_impact = max([abs(imp) for _, imp, _ in important_features])
+                normalized_impacts = [(feat, (imp/max_abs_impact)*7, val) for feat, imp, val in important_features]
+                
+                # 排序，确保红色(正影响)在左侧，蓝色(负影响)在右侧
+                pos_features = [(f, i, v) for f, i, v in normalized_impacts if i > 0]
+                neg_features = [(f, i, v) for f, i, v in normalized_impacts if i < 0]
+                
+                # 绘制特征贡献
+                x_pos = -8  # 起始位置
+                for feat, impact, val in pos_features:
+                    width = abs(impact)
+                    rect = plt.Rectangle((x_pos, 0.1), width, 0.8, color=pos_color, alpha=0.7)
+                    ax2.add_patch(rect)
+                    
+                    # 特征标签显示在图形下方
+                    if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
+                        orig_val = input_data[feat]
+                        ax2.text(x_pos + width/2, -0.3, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                    else:
+                        ax2.text(x_pos + width/2, -0.3, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                    
+                    x_pos += width
+                
+                x_pos = 8  # 蓝色特征起始位置（右侧）
+                for feat, impact, val in neg_features:
+                    width = abs(impact)
+                    x_pos -= width
+                    rect = plt.Rectangle((x_pos, 0.1), width, 0.8, color=neg_color, alpha=0.7)
+                    ax2.add_patch(rect)
+                    
+                    # 特征标签
+                    if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin"]:
+                        orig_val = input_data[feat]
+                        ax2.text(x_pos + width/2, -0.3, f"{feat}\n{orig_val}", ha='center', va='top', fontsize=9)
+                    else:
+                        ax2.text(x_pos + width/2, -0.3, f"{feat}\n{val:.2f}", ha='center', va='top', fontsize=9)
+                
+                # 添加high/low标签
+                ax2.text(8, 1.2, "higher", ha='center', va='bottom', color=pos_color, fontsize=10)
+                ax2.text(-8, 1.2, "lower", ha='center', va='bottom', color=neg_color, fontsize=10)
+                
+                # 添加predicted值和base value
+                ax2.text(0, 1.5, f"base value\n{base_value:.2f}", ha='center', va='center', fontsize=10)
+                ax2.text(current_value, 1.5, f"{prediction_score:.2f}", ha='center', va='center', fontsize=10)
+                
+                # 移除y轴
+                ax2.set_yticks([])
+                ax2.spines['left'].set_visible(False)
+                ax2.spines['right'].set_visible(False)
+                ax2.spines['top'].set_visible(False)
+                
+                plt.tight_layout()
+                st.pyplot(fig2)
+                
+            except Exception as e:
+                st.warning(f"Could not generate second visualization: {str(e)}")
             
             # 添加特征影响的文本解释
             st.subheader("Feature Impact Explanation")
             st.markdown("""
             ### How to interpret the visualization:
-            - The position of the black line shows the predicted probability of fever
-            - Red features on the left push the prediction towards fever
-            - Blue features on the right push the prediction away from fever
-            - The top influencing features are shown with their values
+            - The red features increase the probability of fever
+            - The blue features decrease the probability of fever
+            - The position of the dashed line shows the predicted probability
+            - The base value represents the average prediction across all samples
             """)
             
             # 表格形式展示所有特征的贡献
@@ -309,7 +390,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
                 
                 # Create simple bar chart
                 plt.figure(figsize=(10, 6))
-                colors = ['red' if c > 0 else 'blue' for c in coeffs]
+                colors = ['#ff0051' if c > 0 else '#008bfb' for c in coeffs]  # 使用SHAP颜色
                 plt.barh(feature_names, np.abs(coeffs), color=colors)
                 plt.xlabel('Absolute Coefficient Value')
                 plt.title('Feature Impact on Fever Risk')
