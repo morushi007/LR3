@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 11:41:44 2025
+Created on Wed May 14 12:14:11 2025
 
 @author: LENOVO
 """
@@ -249,101 +249,101 @@ if predict_button:
                 ax.axis('equal')
                 st.pyplot(fig)
             
-            # 尝试使用SHAP进行解释 - 修复SHAP相关代码
+            # 放弃使用SHAP，直接使用模型系数进行特征重要性分析
+            st.markdown("## Feature Impact Analysis")
+            st.info("The chart below shows how each feature influences the prediction. Features with positive values (red) increase fever risk, while features with negative values (blue) decrease risk.")
+            
             try:
-                st.markdown("## Feature Impact Analysis")
-                st.info("The chart below shows how each feature influences the prediction. Features pushing to the right (red) increase fever risk, while those pushing to the left (blue) decrease risk.")
-                
-                # 创建合适的背景数据
-                # 为了避免"index 1 is out of bounds for axis 0 with size 1"错误，
-                # 我们需要确保正确处理二分类预测问题
-                
-                # 方法1：使用KernelExplainer，确保正确指定输出索引
-                # 创建简单的预测函数，只返回正类的概率
-                def predict_proba_positive_class(X):
-                    return model.predict_proba(X)[:, 1]
-                
-                # 创建背景数据 - 这里使用输入数据本身作为背景
-                # 或者创建一个更大的样本集合
-                background_data = pd.concat([input_df] * 10, ignore_index=True)
-                
-                # 创建SHAP解释器
-                explainer = shap.KernelExplainer(predict_proba_positive_class, background_data)
-                
-                # 计算SHAP值 - 注意这里不会有索引问题，因为函数只返回一个类别的概率
-                shap_values = explainer.shap_values(input_df)
-                
-                # 创建SHAP力量图
-                st.subheader("SHAP Force Plot")
-                fig_force = plt.figure(figsize=(12, 4))
-                shap.force_plot(
-                    explainer.expected_value, 
-                    shap_values[0], 
-                    input_df.iloc[0], 
-                    feature_names=input_df.columns.tolist(),
-                    matplotlib=True,
-                    show=False
-                )
-                plt.tight_layout()
-                st.pyplot(fig_force)
-                plt.clf()
-                
-                # 创建SHAP瀑布图
-                st.subheader("SHAP Waterfall Plot")
-                fig_waterfall = plt.figure(figsize=(10, 8))
-                
-                # 使用更安全的方法创建瀑布图
-                shap.plots._waterfall.waterfall_legacy(
-                    explainer.expected_value, 
-                    shap_values[0], 
-                    feature_names=input_df.columns.tolist(),
-                    show=False
-                )
-                plt.tight_layout()
-                st.pyplot(fig_waterfall)
-                
-                # 显示特征重要性表格
-                st.subheader("Feature Importance")
-                feature_importance = pd.DataFrame({
-                    'Feature': input_df.columns.tolist(),
-                    'SHAP Value': np.abs(shap_values[0])
-                }).sort_values('SHAP Value', ascending=False)
-                
-                st.table(feature_importance)
-                
+                # 确认模型是否有系数属性（如逻辑回归模型）
+                if hasattr(model, 'coef_'):
+                    # 创建特征系数的DataFrame
+                    coef_df = pd.DataFrame({
+                        'Feature': input_df.columns.tolist(),
+                        'Coefficient': model.coef_[0]
+                    })
+                    
+                    # 按照系数绝对值排序，以便展示最重要的特征
+                    sorted_df = coef_df.reindex(coef_df['Coefficient'].abs().sort_values(ascending=False).index)
+                    
+                    # 创建系数条形图
+                    fig, ax = plt.subplots(figsize=(10, 8))
+                    colors = ['#3498db' if c < 0 else '#e74c3c' for c in sorted_df['Coefficient']]
+                    
+                    # 绘制水平条形图
+                    bars = ax.barh(sorted_df['Feature'], sorted_df['Coefficient'], color=colors)
+                    
+                    # 添加垂直线表示零点
+                    ax.axvline(x=0, color='gray', linestyle='-', alpha=0.3)
+                    
+                    # 设置坐标轴标签和标题
+                    ax.set_xlabel('Impact on Fever Risk', fontsize=12)
+                    ax.set_title('Feature Impact on Post-operative Fever Prediction', fontsize=14)
+                    
+                    # 为每个条添加数值标签
+                    for bar in bars:
+                        width = bar.get_width()
+                        label_x_pos = width + 0.01 if width > 0 else width - 0.01
+                        label_ha = 'left' if width > 0 else 'right'
+                        ax.text(label_x_pos, bar.get_y() + bar.get_height()/2, 
+                                f'{width:.3f}', va='center', ha=label_ha, fontsize=10)
+                    
+                    # 添加图例
+                    from matplotlib.patches import Patch
+                    legend_elements = [
+                        Patch(facecolor='#e74c3c', label='Increases Fever Risk'),
+                        Patch(facecolor='#3498db', label='Decreases Fever Risk')
+                    ]
+                    ax.legend(handles=legend_elements, loc='lower right')
+                    
+                    # 调整布局并显示
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # 添加特征重要性表格，按照系数绝对值排序
+                    st.subheader("Feature Importance Table")
+                    importance_df = coef_df.copy()
+                    importance_df['Absolute Impact'] = np.abs(importance_df['Coefficient'])
+                    importance_df = importance_df.sort_values('Absolute Impact', ascending=False)
+                    importance_df['Direction'] = importance_df['Coefficient'].apply(
+                        lambda x: "Increases Risk" if x > 0 else "Decreases Risk")
+                    
+                    # 显示表格
+                    st.table(importance_df[['Feature', 'Coefficient', 'Direction', 'Absolute Impact']])
+                    
+                    # 解释患者的具体风险因素
+                    st.subheader("Patient-Specific Risk Factors")
+                    
+                    # 获取对该患者影响最大的正向和负向因素
+                    top_positive = sorted_df[sorted_df['Coefficient'] > 0].head(3)
+                    top_negative = sorted_df[sorted_df['Coefficient'] < 0].head(3)
+                    
+                    if not top_positive.empty:
+                        st.markdown("#### Top factors increasing this patient's fever risk:")
+                        for idx, row in top_positive.iterrows():
+                            feature_name = row['Feature']
+                            feature_desc = next((p["description"] for f, p in feature_ranges.items() if f == feature_name), feature_name)
+                            st.markdown(f"- **{feature_desc}**: Coefficient = {row['Coefficient']:.3f}")
+                    
+                    if not top_negative.empty:
+                        st.markdown("#### Top factors decreasing this patient's fever risk:")
+                        for idx, row in top_negative.iterrows():
+                            feature_name = row['Feature']
+                            feature_desc = next((p["description"] for f, p in feature_ranges.items() if f == feature_name), feature_name)
+                            st.markdown(f"- **{feature_desc}**: Coefficient = {row['Coefficient']:.3f}")
+                    
+                else:
+                    st.info("Feature impact analysis is not available for this model type.")
+                    
             except Exception as e:
-                st.warning(f"Unable to generate SHAP explanation: {str(e)}")
+                st.error(f"Unable to generate feature impact visualization: {str(e)}")
                 st.markdown("""
-                #### Alternative Feature Impact Visualization
+                Feature impact analysis is currently unavailable. This may be due to:
+                1. The model structure is not compatible with coefficient-based analysis
+                2. Required visualization libraries are missing
+                3. The model file format is not as expected
                 
-                Since SHAP visualization is not available, we'll show a simplified feature impact analysis based on the model's coefficients.
+                Please ensure the model is a coefficients-based model like Logistic Regression.
                 """)
-                
-                # 如果SHAP不可用，创建简单的基于模型系数的特征影响可视化
-                try:
-                    if hasattr(model, 'coef_'):
-                        coef_df = pd.DataFrame({
-                            'Feature': input_df.columns.tolist(),
-                            'Coefficient': model.coef_[0]
-                        }).sort_values('Coefficient', ascending=False)
-                        
-                        # 创建系数图
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        colors = ['green' if c < 0 else 'red' for c in coef_df['Coefficient']]
-                        ax.barh(coef_df['Feature'], coef_df['Coefficient'], color=colors)
-                        ax.set_xlabel('Coefficient Value')
-                        ax.set_ylabel('Feature')
-                        ax.set_title('Feature Coefficients - Red increases fever risk, Green decreases')
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        
-                        # 显示特征系数表格
-                        st.subheader("Feature Coefficients")
-                        st.table(coef_df)
-                    else:
-                        st.info("Feature impact analysis is not available for this model type.")
-                except Exception as e:
-                    st.error(f"Unable to generate alternative feature impact visualization: {str(e)}")
                 
         except Exception as e:
             st.error(f"Error during prediction: {str(e)}")
