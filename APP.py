@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 09:02:52 2025
+Created on Wed May 14 09:31:01 2025
 
 @author: LENOVO
 """
 
-# app.py
+# -*- coding: utf-8 -*-
 import streamlit as st
 
-# ✅ 必须放在最顶层，不在任何函数、类、判断中
+# ✅ 页面配置必须在所有 streamlit 操作前执行
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ——— 其他模块导入 ———
+# 导入模块
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -110,23 +110,25 @@ def main():
         ax.axis("equal")
         st.pyplot(fig)
 
+        # SHAP waterfall plot
+        st.subheader("SHAP Waterfall Plot")
         try:
-            st.subheader("SHAP Force Plot (Matplotlib)")
             explainer = shap.LinearExplainer(model, df, feature_perturbation="interventional")
             shap_values = explainer.shap_values(df)
 
-            fig = plt.figure(figsize=(12, 2))
-            shap.force_plot(
-                base_value=explainer.expected_value,
-                shap_values=shap_values[0],
-                features=df.iloc[0],
-                matplotlib=True,
-                show=False
+            shap_values_obj = shap.Explanation(
+                values=shap_values[0],
+                base_values=explainer.expected_value,
+                data=df.iloc[0].values,
+                feature_names=df.columns.tolist()
             )
-            plt.tight_layout()
+
+            fig = plt.figure(figsize=(10, 5))
+            shap.plots._waterfall.waterfall_legacy(shap_values_obj)
             st.pyplot(fig)
+
         except Exception as e:
-            st.error(f"SHAP force plot error: {e}")
+            st.error(f"SHAP waterfall plot error: {e}")
 
 
 if __name__ == "__main__":
