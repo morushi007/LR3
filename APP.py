@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 09:31:01 2025
+Created on Wed May 14 09:35:34 2025
 
 @author: LENOVO
 """
@@ -8,7 +8,7 @@ Created on Wed May 14 09:31:01 2025
 # -*- coding: utf-8 -*-
 import streamlit as st
 
-# ✅ 页面配置必须在所有 streamlit 操作前执行
+# ✅ 页面配置必须放最前，且独立调用
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 导入模块
+# 📦 依赖导入
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,6 +45,7 @@ def main():
         - **Mayo Score**: PCNL surgical complexity  
         """)
 
+    # ——— 用户输入特征配置 ———
     feature_ranges = {
         "LMR": {"type": "numerical", "min": 0.0, "max": 100.0, "default": 5.0},
         "Preoperative_N": {"type": "numerical", "min": 0.0, "max": 30.0, "default": 4.0},
@@ -63,6 +64,7 @@ def main():
         "MayoScore_bin": {"type": "categorical", "options": ["<3", "≥3"], "default": "<3"}
     }
 
+    # ——— 表单输入 ———
     st.header("Enter Patient Parameters")
     cols = st.columns(3)
     input_data = {}
@@ -83,9 +85,12 @@ def main():
                     index=cfg["options"].index(cfg["default"])
                 )
 
+    # ——— 预测按钮 ———
     if st.button("Predict Fever Risk", use_container_width=True):
         model = load_model()
         df = pd.DataFrame([input_data])
+
+        # ——— 特征编码 ———
         df["Sex"] = df["Sex"].map({"Male": 1, "Female": 0})
         df["Diabetes_mellitus"] = df["Diabetes_mellitus"].map({"Yes": 1, "No": 0})
         df["UrineLeuk_bin"] = df["UrineLeuk_bin"].map({">0": 1, "=0": 0})
@@ -93,10 +98,12 @@ def main():
         df["degree_of_hydronephrosis"] = df["degree_of_hydronephrosis"].map({"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3})
         df["MayoScore_bin"] = df["MayoScore_bin"].map({"≥3": 1, "<3": 0})
 
+        # ——— 模型预测 ———
         proba = model.predict_proba(df)[0][1] * 100
         color = "green" if proba < 25 else "lightgreen" if proba < 50 else "orange" if proba < 75 else "red"
         level = "Low" if proba < 25 else "Moderate-Low" if proba < 50 else "Moderate-High" if proba < 75 else "High"
 
+        # ——— 输出结果 ———
         st.subheader("Prediction Result")
         st.markdown(f"""
         <div style="padding:20px;border-radius:10px;background-color:{color};text-align:center;">
@@ -110,7 +117,7 @@ def main():
         ax.axis("equal")
         st.pyplot(fig)
 
-        # SHAP waterfall plot
+        # ——— SHAP waterfall 图 ———
         st.subheader("SHAP Waterfall Plot")
         try:
             explainer = shap.LinearExplainer(model, df, feature_perturbation="interventional")
@@ -118,7 +125,7 @@ def main():
 
             shap_values_obj = shap.Explanation(
                 values=shap_values[0],
-                base_values=explainer.expected_value,
+                base_values=np.array([explainer.expected_value]),
                 data=df.iloc[0].values,
                 feature_names=df.columns.tolist()
             )
