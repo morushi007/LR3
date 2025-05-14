@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 08:47:44 2025
+Created on Wed May 14 08:53:23 2025
 
 @author: LENOVO
 """
 
 # -*- coding: utf-8 -*-
-import streamlit as st
+"""
+PCNL Post-Operative Fever Prediction Web App
+Author: LENOVO
+"""
 
-# ✅ 第一行 Streamlit 相关的调用，不能出现在函数里！
+# 必须最先设置页面配置
+import streamlit as st
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
@@ -16,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ✅ 其他模块导入放在后面
+# 后续导入模块
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +34,7 @@ def load_model():
     try:
         return joblib.load("LR.pkl")
     except FileNotFoundError:
-        st.error("Model file 'LR.pkl' not found. Please place it alongside this script.")
+        st.error("模型文件 'LR.pkl' 未找到，请将其与该脚本放在同一目录下。")
         return None
 
 
@@ -52,6 +56,7 @@ def main():
         - **Mayo Score**: Mayo Surgical Complexity Score  
         """)
 
+    # 预测特征设置
     feature_ranges = {
         "LMR": {"type": "numerical", "min": 0.0, "max": 100.0, "default": 5.0},
         "Preoperative_N": {"type": "numerical", "min": 0.0, "max": 30.0, "default": 4.0},
@@ -70,6 +75,7 @@ def main():
         "MayoScore_bin": {"type": "categorical", "options": ["<3", "≥3"], "default": "<3"}
     }
 
+    # 输入界面
     st.header("Enter Patient Parameters")
     cols = st.columns(3)
     input_data = {}
@@ -121,9 +127,9 @@ def main():
                 ax.axis("equal")
                 st.pyplot(fig)
 
+            # SHAP 力图
             try:
                 st.subheader("SHAP Force Plot (Simplified)")
-                shap.initjs()
                 explainer = shap.LinearExplainer(model, df, feature_perturbation="interventional")
                 shap_values = explainer.shap_values(df)
 
@@ -150,12 +156,11 @@ def main():
         st.markdown("""
         1. Enter patient parameters.  
         2. Click **Predict Fever Risk**.  
-        3. Review the probability and SHAP impact chart.  
+        3. Review the prediction results and SHAP feature impact chart.  
 
-        **Note**: Model trained on historical data; applicability may vary.
+        **Note**: Model trained on historical data; clinical use requires validation.
         """)
 
 
-# ✅ 保证 set_page_config 不会被封装，主程序封装在 main()
 if __name__ == "__main__":
     main()
