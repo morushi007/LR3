@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 10:03:18 2025
+Created on Wed May 14 10:39:31 2025
 
 @author: LENOVO
 """
+
 # -*- coding: utf-8 -*-
 """
 Created on Tue May 13 13:48:35 2025
@@ -12,8 +13,18 @@ Created on Tue May 13 13:48:35 2025
 """
 
 # app.py
-# -*- coding: utf-8 -*-
 import streamlit as st
+
+# ——— Page configuration ———
+# Note: set_page_config must be the first Streamlit command
+st.set_page_config(
+    page_title="PCNL Post-Operative Fever Prediction",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Import other libraries after page config
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,14 +32,6 @@ import joblib
 import shap
 from sklearn.linear_model import LogisticRegression
 import os
-
-# ——— Page configuration ———
-st.set_page_config(
-    page_title="PCNL Post-Operative Fever Prediction",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # ——— Custom CSS ———
 st.markdown("""
@@ -131,10 +134,14 @@ for idx, (feat, cfg) in enumerate(feature_ranges.items()):
             )
 
 st.markdown("---")
+
+# ——— Prediction button and logic ———
 if st.button("Predict Fever Risk", use_container_width=True):
     model = load_model()
     if model:
+        # Create DataFrame from input data
         df = pd.DataFrame([input_data])
+        
         # Encode categorical features
         df["Sex"] = df["Sex"].map({"Male": 1, "Female": 0})
         df["Diabetes_mellitus"] = df["Diabetes_mellitus"].map({"Yes": 1, "No": 0})
@@ -184,7 +191,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             st.markdown("## Feature Impact Analysis")
             st.markdown("""
             <div style="padding:10px;border-radius:5px;background-color:#f0f2f6;">
-                <p style="margin-bottom:0;"><strong>红色特征增加发热风险；蓝色特征降低发热风险。</strong></p>
+                <p style="margin-bottom:0;"><strong>Red features increase fever risk; blue features decrease risk.</strong></p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -211,7 +218,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             st.pyplot(fig)
             
             # Add waterfall plot for more detailed visualization
-            st.subheader("特征贡献瀑布图")
+            st.subheader("Feature Contribution Waterfall")
             fig, ax = plt.subplots(figsize=(10, 6))
             shap.plots._waterfall.waterfall_legacy(
                 explainer.expected_value,
@@ -224,20 +231,20 @@ if st.button("Predict Fever Risk", use_container_width=True):
             st.pyplot(fig)
             
             # Explanation
-            st.subheader("如何解读这些可视化")
+            st.subheader("How to interpret these visualizations")
             st.markdown("""
-            - **力图 (Force Plot)**: 展示每个特征如何将预测从基准值（模型输出平均值）推向最终预测。
-                - **红色特征** 增加预测值（提高发热风险）
-                - **蓝色特征** 降低预测值（降低发热风险）
-                - 每个彩色段的宽度表示该特征影响的大小
+            - **Force Plot**: Shows how each feature pushes the prediction from the base value (average model output) to the final prediction.
+                - **Red features** increase the prediction (higher fever risk)
+                - **Blue features** decrease the prediction (lower fever risk)
+                - The width of each colored segment shows the magnitude of that feature's impact
             
-            - **瀑布图 (Waterfall Plot)**: 展示特征对预测的累积效果。
-                - 从基准值开始，每个特征要么增加要么减少预测值
-                - 特征按其影响大小排序
+            - **Waterfall Plot**: Shows the cumulative effect of features on the prediction.
+                - Starting from the base value, each feature either increases or decreases the prediction
+                - Features are ordered by their impact magnitude
             """)
             
             # Display feature contributions table
-            st.subheader("所有特征贡献")
+            st.subheader("All Feature Contributions")
             
             # Get original feature values (before encoding)
             orig_values = []
@@ -249,17 +256,17 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             # Create DataFrame for display
             feature_contrib = pd.DataFrame({
-                '特征': df.columns,
-                '输入值': orig_values,
-                '影响': shap_values[0],
-                '方向': ['增加发热风险' if sv > 0 else '降低发热风险' for sv in shap_values[0]]
-            }).sort_values('影响', key=abs, ascending=False)
+                'Feature': df.columns,
+                'Input Value': orig_values,
+                'Impact': shap_values[0],
+                'Direction': ['Increases fever risk' if sv > 0 else 'Decreases fever risk' for sv in shap_values[0]]
+            }).sort_values('Impact', key=abs, ascending=False)
             
             st.dataframe(feature_contrib)
             
             # Display the top 5 influential features as text
-            st.subheader("主要特征影响")
-            st.markdown("影响预测的关键因素:")
+            st.subheader("Top Feature Impacts")
+            st.markdown("Key factors affecting prediction:")
             
             # Sort features by absolute impact
             sorted_features = sorted(zip(df.columns, shap_values[0], orig_values), 
@@ -267,17 +274,17 @@ if st.button("Predict Fever Risk", use_container_width=True):
                                     reverse=True)
             
             for feat, impact, val in sorted_features[:5]:
-                direction = "增加" if impact > 0 else "降低"
+                direction = "increases" if impact > 0 else "decreases"
                 if feat in ["Sex", "Diabetes_mellitus", "UrineLeuk_bin", "Channel_size", "MayoScore_bin", "degree_of_hydronephrosis"]:
-                    st.markdown(f"- **{feat} = {val}**: {direction}发热风险")
+                    st.markdown(f"- **{feat} = {val}**: {direction} fever risk")
                 else:
-                    st.markdown(f"- **{feat} = {val:.2f}**: {direction}发热风险")
+                    st.markdown(f"- **{feat} = {val:.2f}**: {direction} fever risk")
             
         except Exception as e:
-            st.warning(f"无法生成SHAP可视化: {str(e)}")
+            st.warning(f"Could not generate SHAP visualization: {str(e)}")
             
             # Fallback to simple feature importance visualization
-            st.subheader("特征重要性 (基础可视化)")
+            st.subheader("Feature Importance (Basic Visualization)")
             
             # Use model coefficients and input values for feature importance
             coeffs = model.coef_[0]
@@ -300,8 +307,8 @@ if st.button("Predict Fever Risk", use_container_width=True):
             
             plt.barh(y_pos, sorted_impacts, color=sorted_colors)
             plt.yticks(y_pos, sorted_names)
-            plt.xlabel('对预测的影响')
-            plt.title('特征对发热风险的影响')
+            plt.xlabel('Impact on Prediction')
+            plt.title('Feature Impact on Fever Risk')
             plt.axvline(x=0, color='gray', linestyle='-', linewidth=0.5)
             plt.tight_layout()
             st.pyplot(plt)
@@ -309,15 +316,15 @@ if st.button("Predict Fever Risk", use_container_width=True):
 # ——— Footer ———
 st.markdown("""
 <div class="footer">
-    © 2025 PCNL 发热预测模型 | 仅供学术使用。
+    © 2025 PCNL Fever Prediction Model | For academic use only.
 </div>
 """, unsafe_allow_html=True)
 
-with st.expander("使用说明"):
+with st.expander("How to Use"):
     st.markdown("""
-    1. 输入患者参数。
-    2. 点击**预测发热风险**。
-    3. 查看概率和特征影响图表。
+    1. Enter patient parameters.  
+    2. Click **Predict Fever Risk**.  
+    3. Review the probability and feature-impact charts.  
 
-    **注意**：模型基于历史数据训练；适用性可能因个体而异。
+    **Note**: Model trained on historical data; applicability may vary.
     """)
