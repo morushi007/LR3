@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 14 07:55:45 2025
+Created on Wed May 14 08:37:09 2025
 
 @author: LENOVO
 """
@@ -19,7 +19,7 @@ import joblib
 import shap
 from sklearn.linear_model import LogisticRegression
 
-# ——— Page configuration ———
+# ✅ 修复关键：将页面配置移到最前
 st.set_page_config(
     page_title="PCNL Post-Operative Fever Prediction",
     page_icon="🏥",
@@ -48,7 +48,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ——— Load model with caching ———
 @st.cache_resource
 def load_model():
     try:
@@ -57,27 +56,26 @@ def load_model():
         st.error("Model file 'LR.pkl' not found. Please place it alongside this script.")
         return None
 
-# ——— Title and description ———
+# ——— Title and intro ———
 st.title("PCNL Post-Operative Fever Prediction")
 st.markdown("### A machine learning–based tool to estimate fever risk after PCNL")
 
-# ——— Sidebar ———
+# ——— Sidebar Info ———
 with st.sidebar:
     st.header("About the Model")
     st.info(
         "This logistic regression model is trained on historical clinical data "
-        "to predict the risk of post-operative fever after percutaneous nephrolithotomy (PCNL). "
-        "Enter patient parameters on the main page and click 'Predict Fever Risk.'"
+        "to predict the risk of post-operative fever after percutaneous nephrolithotomy (PCNL)."
     )
     st.header("Feature Descriptions")
     st.markdown("""
     - **LMR**: Lymphocyte-to-Monocyte Ratio  
     - **PLR**: Platelet-to-Lymphocyte Ratio  
     - **BMI**: Body Mass Index  
-    - **Mayo Score**: Mayo Surgical Complexity Score for PCNL procedures  
+    - **Mayo Score**: Mayo Surgical Complexity Score  
     """)
 
-# ——— Feature configuration ———
+# ——— Feature Configuration ———
 feature_ranges = {
     "LMR": {"type": "numerical", "min": 0.0, "max": 100.0, "default": 5.0},
     "Preoperative_N": {"type": "numerical", "min": 0.0, "max": 30.0, "default": 4.0},
@@ -96,7 +94,7 @@ feature_ranges = {
     "MayoScore_bin": {"type": "categorical", "options": ["<3", "≥3"], "default": "<3"}
 }
 
-# ——— Input form ———
+# ——— Input UI ———
 st.header("Enter Patient Parameters")
 cols = st.columns(3)
 input_data = {}
@@ -105,18 +103,19 @@ for idx, (feat, cfg) in enumerate(feature_ranges.items()):
     with col:
         if cfg["type"] == "numerical":
             input_data[feat] = st.number_input(
-                label=f"{feat}",
+                label=feat,
                 min_value=cfg["min"],
                 max_value=cfg["max"],
                 value=cfg["default"]
             )
         else:
             input_data[feat] = st.selectbox(
-                label=f"{feat}",
+                label=feat,
                 options=cfg["options"],
                 index=cfg["options"].index(cfg["default"])
             )
 
+# ——— Prediction ———
 st.markdown("---")
 if st.button("Predict Fever Risk", use_container_width=True):
     model = load_model()
@@ -148,7 +147,7 @@ if st.button("Predict Fever Risk", use_container_width=True):
             ax.axis("equal")
             st.pyplot(fig)
 
-        # SHAP Force Plot
+        # ——— SHAP Force Plot ———
         try:
             st.subheader("SHAP Force Plot (Simplified)")
             shap.initjs()
